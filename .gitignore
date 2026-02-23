@@ -1,0 +1,35 @@
+# ── Personal soul configs ──────────────────────────────────────────────────────
+godlocal_data/souls/god_soul.md
+godlocal_data/souls/*.personal.md
+godlocal_data/souls/my_*.md
+
+# ── Secrets Vault ─────────────────────────────────────────────────────────────
+godlocal_data/.vault.key
+godlocal_data/vault.enc
+godlocal_data/**/.vault.key
+
+# ── Runtime data ──────────────────────────────────────────────────────────────
+godlocal_data/memory/
+godlocal_data/logs/
+godlocal_data/outputs/
+godlocal_data/uploads/
+
+# ── Env / keys ────────────────────────────────────────────────────────────────
+.env
+.env.*
+*.key
+*.pem
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
