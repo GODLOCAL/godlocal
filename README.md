@@ -1,3 +1,5 @@
+![GodLocal](https://raw.githubusercontent.com/GODLOCAL/godlocal/main/assets/logo-banner.jpg)
+
 # GodLocal
 
 **Your AI. Your machine. Your soul. No cloud.**
@@ -26,29 +28,29 @@ python godlocal_v5.py
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐
-│             SOUL                    │
-│   soul/*.md — who your AI is        │
-│   "I am a cold precise quant..."    │
-└──────────────────┬──────────────────┘
-                   │
-┌──────────────────▼──────────────────┐
-│             BRAIN                   │
-│   AirLLM (layer-by-layer, any RAM)  │
-│   or Ollama (faster, daemon mode)   │
-└──────────────────┬──────────────────┘
-                   │
-┌──────────────────▼──────────────────┐
-│             BODY (tools)            │
-│  Files · Calendar · Shell · Web     │
-│  Speech · MRI · Custom plugins      │
-└──────────────────┬──────────────────┘
-                   │
-┌──────────────────▼──────────────────┐
-│             SLEEP                   │
-│  Nightly memory consolidation       │
-│  Hippocampal replay → long-term     │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│               SOUL                   │
+│   soul/*.md — who your AI is         │
+│   "I am a cold precise quant..."     │
+└────────────────┬─────────────────────┘
+                 │
+┌────────────────▼─────────────────────┐
+│               BRAIN                  │
+│   AirLLM (layer-by-layer, any RAM)   │
+│   or Ollama (faster, daemon mode)    │
+└────────────────┬─────────────────────┘
+                 │
+┌────────────────▼─────────────────────┐
+│          BODY (tools)                │
+│  Files · Calendar · Shell · Web      │
+│  Speech · MRI · Custom plugins       │
+└────────────────┬─────────────────────┘
+                 │
+┌────────────────▼─────────────────────┐
+│               SLEEP                  │
+│  Nightly memory consolidation        │
+│  Hippocampal replay → long-term      │
+└──────────────────────────────────────┘
 ```
 
 ---
@@ -104,9 +106,9 @@ A soul is a markdown file that defines who your AI is.
 
 ```
 godlocal_data/souls/
-├── default.md     # calm, precise, private assistant
-├── warrior.md     # X-ZERO — cold Solana quant agent
-└── sovereign.md   # full autonomy, max agency
+├── default.md    # calm, precise, private assistant
+├── warrior.md    # X-ZERO — cold Solana quant agent
+└── sovereign.md  # full autonomy, max agency
 ```
 
 **Switch souls at runtime:**
@@ -159,7 +161,7 @@ Mimics hippocampal replay during slow-wave sleep. The model gets *wiser* — not
 |--------|------|
 | ☕ Ko-fi | [ko-fi.com/godlocal](https://ko-fi.com/godlocal) |
 | 🪙 SOL | `EWcSFdC3eERL6mAbwbdX3W9eFfYZJbFvaix1J3JcGM1r` |
-| 💼 Commercial License | [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) |
+| 📜 Commercial License | [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) |
 | 🌐 Website | [godlocal.ai](https://godlocal.ai) *(coming soon)* |
 
 ---
@@ -170,7 +172,7 @@ Mimics hippocampal replay during slow-wave sleep. The model gets *wiser* — not
 - [ ] v5.1 — ConnectorsModule (Composio SDK, 500+ service integrations)
 - [ ] v5.2 — Computer Use + TradingView webhooks
 - [ ] v5.3 — Notifications, email, translate
-- [ ] X100 OASIS integration (archetype soul ↔ $X100 token gate)
+- [ ] X100 OASIS integration (archetype soul → $X100 token gate)
 
 ---
 
