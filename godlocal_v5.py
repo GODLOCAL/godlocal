@@ -233,6 +233,7 @@ class SleepCycle:
     def __init__(self, memory, llm_fn):
         self.memory = memory
         self.llm    = llm_fn
+        self._evolve = SelfEvolveEngine() if SELF_EVOLVE_AVAILABLE else None
 
     def run(self):
         logger.info("🌙 sleep_cycle() starting…")
@@ -260,6 +261,30 @@ class SleepCycle:
                    report["pruned_count"], report["promoted_count"]))
         c.commit(); c.close()
         logger.info(f"🌙 Done: +{len(promoted_ids)} promoted, -{len(prune_ids)} pruned")
+
+        # Phase 2 — Self-Evolution: scan gaps created since last consolidation
+        if self._evolve:
+            try:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                evolve_result = loop.run_until_complete(
+                    self._evolve.run_evolution_cycle(
+                        llm_generate=self.llm,
+                        max_gaps=5,
+                        hours_back=24,
+                    )
+                )
+                loop.close()
+                report["self_evolve"] = {
+                    "gaps_found":    evolve_result.gaps_found,
+                    "gaps_resolved": evolve_result.gaps_resolved,
+                    "topics":        evolve_result.topics_resolved,
+                }
+                logger.info(f"🧬 Self-evolution: {evolve_result.gaps_resolved}/{evolve_result.gaps_found} gaps resolved")
+            except Exception as e:
+                logger.warning(f"[SelfEvolve] skipped: {e}")
+                report["self_evolve"] = {"error": str(e)}
+
         return report
 
 
@@ -384,12 +409,19 @@ class GodLocalAgent:
                 "memory_chroma": CHROMA_AVAILABLE, "image_generation": IMAGE_GEN_AVAILABLE,
                 "video_generation": VIDEO_GEN_AVAILABLE, "tts_bark": BARK_AVAILABLE,
                 "music_musicgen": MUSICGEN_AVAILABLE, "app_generation": True,
-                "safe_executor": True, "sleep_cycle": True, "medical_mri": MEDICAL_AVAILABLE,
+                "safe_executor": True, "sleep_cycle": True, "self_evolve": SELF_EVOLVE_AVAILABLE, "medical_mri": MEDICAL_AVAILABLE,
             },
             "device": CFG._device(),
             "session_messages": len(self.history),
         }
 
+
+
+try:
+    from self_evolve import SelfEvolveEngine
+    SELF_EVOLVE_AVAILABLE = True
+except ImportError:
+    SELF_EVOLVE_AVAILABLE = False
 
 app = FastAPI(title="GodLocal v5",
               description="Sovereign AI Studio — Chat · Images · Video · Apps · Audio · Medical",
