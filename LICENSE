@@ -1,0 +1,28 @@
+                    GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+ Copyright (C) 2026 Rostyslav Oliinyk
+ godlocal.ai — Sovereign AI Studio
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Affero General Public License as published
+ by the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU Affero General Public License for more details.
+
+ NETWORK USE DISCLOSURE:
+ If you modify GodLocal and run it as a network service (SaaS, API,
+ cloud deployment), you MUST release your modifications under AGPL-3.0.
+ This applies even if users interact with the software over a network
+ without receiving a copy.
+
+ COMMERCIAL LICENSE:
+ Organizations that cannot comply with AGPL-3.0 (e.g., closed-source
+ enterprise or SaaS deployments) may obtain a commercial license.
+ Contact: license@godlocal.ai
+
+ Full AGPL-3.0 text: https://www.gnu.org/licenses/agpl-3.0.html
