@@ -1,1 +1,4 @@
-"""core/ — GodLocal core modules: AgentPool and future runtime services."""
+from .brain import Brain
+from .settings import settings
+
+__all__ = ["Brain", "settings"]

@@ -1,61 +1,30 @@
 version: "3.9"
 
 services:
-  # ─── Ollama — local model server ───────────────────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    container_name: godlocal-ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_models:/root/.ollama
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
-  # ─── ChromaDB — vector memory ───────────────────────────────────────────
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: godlocal-chromadb
-    restart: unless-stopped
-    ports:
-      - "8001:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-
-  # ─── GodLocal — main agent service ───────────────────────────────────
   godlocal:
     build: .
-    container_name: godlocal-agent
-    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${GODLOCAL_API_PORT:-8000}:8000"
     volumes:
-      - ./godlocal_data/souls:/app/godlocal_data/souls
-      - ./.env:/app/.env:ro
+      - .:/app
+      - godlocal_data:/app/godlocal_data
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - CHROMA_HOST=chromadb
-      - SLEEP_CYCLE_HOUR=${SLEEP_CYCLE_HOUR:-1}
-      - DEFAULT_MODEL=${DEFAULT_MODEL:-qwen2.5:7b}
+      - GODLOCAL_MODEL=${GODLOCAL_MODEL:-qwen3:8b}
+      - GODLOCAL_API_KEY=${GODLOCAL_API_KEY:-}
+      - GODLOCAL_AUTOGENESIS_APPLY=${GODLOCAL_AUTOGENESIS_APPLY:-false}
     depends_on:
-      ollama:
-        condition: service_healthy
-      chromadb:
-        condition: service_healthy
+      - sandbox
+    restart: unless-stopped
+
+  sandbox:
+    build:
+      context: .
+      dockerfile: extensions/sandbox/Dockerfile.sandbox
+    image: godlocal-sandbox:latest
+    volumes:
+      - .:/app:ro
+    command: tail -f /dev/null
+    restart: unless-stopped
 
 volumes:
-  ollama_models:
-  chroma_data:
-
-networks:
-  default:
-    name: godlocal-net
+  godlocal_data:
