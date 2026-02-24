@@ -334,14 +334,34 @@ class SleepCycle:
                     _lines = [l for l in _section.splitlines() if l.strip()]
                     if len(_lines) > 50:
                         logger.info(f"✂️  Pruning god_soul.md [LEARNED_PATTERNS]: {len(_lines)} lines → compressing")
+                        # Deep summarization: LLM synthesises ALL patterns into rich insights
+                        # Not just top-10 trim — preserves accumulated wisdom as compressed understanding
                         _prune_prompt = (
-                            f"You are compressing an AI agent's learned patterns. "                            f"Distill the following {len(_lines)} pattern entries into "                            f"the 10 most important, actionable, distinct insights. "                            f"Return only the 10 lines, one per line, no numbering.\n\n"
+                            f"You are the memory consolidation system for a sovereign AI agent.\n"
+                            f"Below are {len(_lines)} learned patterns from past interactions.\n"
+                            f"Your task: synthesise them into exactly 10 DEEP, ACTIONABLE insights.\n"
+                            f"Rules:\n"
+                            f"- Each insight must be a SYNTHESIS of multiple patterns (not just one repeated)\n"
+                            f"- Prefer patterns with high frequency or user correction signals\n"
+                            f"- Discard redundant/low-signal entries\n"
+                            f"- Format: one insight per line, start with category tag [BEHAVIOR|STYLE|DOMAIN|MEMORY]\n"
+                            f"- Return ONLY the 10 lines, no preamble\n\n"
+                            f"Patterns to synthesise:\n"
                             + "\n".join(_lines)
                         )
-                        _compressed = self.llm.complete(_prune_prompt, max_tokens=500).strip()
-                        _new_soul = _soul_text[:_pat_match.start(2)] + "\n" + _compressed + "\n" + _soul_text[_pat_match.end(2):]
+                        _compressed = self.llm.complete(_prune_prompt, max_tokens=800).strip()
+                        # Prepend synthesis header for traceability
+                        _synthesis_header = (
+                            f"\n<!-- synthesised from {len(_lines)} patterns on {_ldt.datetime.utcnow().date()} -->\n"
+                        )
+                        _new_soul = (
+                            _soul_text[:_pat_match.start(2)]
+                            + _synthesis_header
+                            + _compressed + "\n"
+                            + _soul_text[_pat_match.end(2):]
+                        )
                         _soul_path.write_text(_new_soul, encoding="utf-8")
-                        logger.info("✅ god_soul.md [LEARNED_PATTERNS] pruned to top-10")
+                        logger.info(f"✅ god_soul.md [LEARNED_PATTERNS] deep-synthesised: {len(_lines)} → 10 insights")
         except Exception as _pe:
             logger.warning(f"[SoulPrune] skipped: {_pe}")
 

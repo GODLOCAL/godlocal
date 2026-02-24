@@ -52,6 +52,8 @@ def log_interaction(
     correction_note: Optional[str] = None,
     session_id: Optional[str] = None,
     tags: Optional[list] = None,
+    latency_ms: Optional[float] = None,
+    tokens_used: Optional[int] = None,
 ):
     """
     Record one interaction to the performance log.
@@ -64,6 +66,8 @@ def log_interaction(
         correction_note: What the correction was (extracted from follow-up message)
         session_id:      Current session UUID
         tags:            Topic tags (e.g. ['solana', 'trading', 'sleep_cycle'])
+        latency_ms:      Response generation time in milliseconds
+        tokens_used:     Approximate token count for this response
     """
     _ensure_dir()
     _rotate_log_if_needed()  # Auto-rotate at 5MB
@@ -77,6 +81,8 @@ def log_interaction(
         "correction_note": correction_note,
         "tags": tags or [],
         "response_len": len(agent_response),
+        "latency_ms": latency_ms,
+        "tokens_used": tokens_used if tokens_used is not None else len(agent_response.split()),
     }
     with PERF_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -106,6 +112,11 @@ def get_correction_rate(hours_back: int = 24) -> float:
     if not interactions:
         return 0.0
     corrected = sum(1 for i in interactions if i.get("was_corrected"))
+    # Extended metrics: latency + token tracking
+    latencies = [i["latency_ms"] for i in interactions if i.get("latency_ms") is not None]
+    tokens    = [i["tokens_used"] for i in interactions if i.get("tokens_used") is not None]
+    avg_latency_ms = round(sum(latencies) / len(latencies), 1) if latencies else None
+    avg_tokens     = round(sum(tokens) / len(tokens), 1) if tokens else None
     return corrected / len(interactions)
 
 
