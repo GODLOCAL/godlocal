@@ -22,3 +22,6 @@ composio-core>=0.7
 
 # MCP client (Paper Desktop + other MCP servers)
 mcp>=1.0.0
+
+# Sonic gateway (WebSocket streaming server + client)
+websockets>=12.0
