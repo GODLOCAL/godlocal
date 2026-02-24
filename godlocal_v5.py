@@ -758,6 +758,18 @@ async def store_memory(content: str, importance: float = 0.5):
 
 
 if __name__ == "__main__":
+    import argparse as _argparse
+    _ap = _argparse.ArgumentParser(description="GodLocal v5 — Sovereign AI Studio")
+    _ap.add_argument("--dry-run",  action="store_true", help="Disable evolve/patch writes")
+    _ap.add_argument("--verbose",  action="store_true", help="DEBUG-level logging")
+    _ap.add_argument("--host",     default="0.0.0.0",  help="Bind host")
+    _ap.add_argument("--port",     type=int, default=8000, help="Bind port")
+    _ap_args, _ = _ap.parse_known_args()
+    DRY_RUN: bool = _ap_args.dry_run
+    if _ap_args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    if DRY_RUN:
+        logging.warning("⚠️  DRY-RUN mode active — evolve/patch writes disabled")
     print("""
 ╬══════════════════════════════════════════════════════════╖
 ║        GodLocal v5 — Sovereign AI Studio                 ║

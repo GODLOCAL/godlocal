@@ -406,20 +406,90 @@ class SonicGatewayConnector(BaseConnectorAgent):
 
 if __name__ == "__main__":
     import sys
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
-    if "--serve" in sys.argv:
-        server = SonicServer()
-        print(f"🎵 Sonic gateway → ws://{SONIC_HOST}:{SONIC_PORT}/v1/responses")
-        print(f"   Backend: {OLLAMA_BASE_URL}  Model: {DEFAULT_MODEL}")
-        asyncio.run(server.start())
+    verbose  = "--verbose" in sys.argv or "-v" in sys.argv
+    dry_run  = "--dry-run" in sys.argv
+    serve    = "--serve"   in sys.argv
+    for arg in sys.argv:
+        if arg.startswith("--model="):
+            os.environ["SONIC_MODEL"] = arg.split("=", 1)[1]
+
+    log_level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s" if verbose
+               else "%(asctime)s %(message)s",
+    )
+
+    async def _preflight() -> bool:
+        ok = True
+        # Check packages
+        for pkg in ("websockets", "httpx"):
+            try:
+                __import__(pkg)
+                if verbose:
+                    print(f"  ✅ {pkg}")
+            except ImportError:
+                print(f"  ❌ Missing: pip install {pkg}")
+                ok = False
+        if not ok:
+            return False
+        # Check Ollama
+        try:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=5) as hc:
+                r = await hc.get(f"{OLLAMA_BASE_URL}/api/tags")
+            if r.status_code == 200:
+                models = [m["name"] for m in r.json().get("models", [])]
+                if verbose:
+                    print(f"  ✅ Ollama — {len(models)} models")
+                if DEFAULT_MODEL not in models:
+                    print(f"  ⚠️  Model \'{DEFAULT_MODEL}\' not found.")
+                    print(f"     Available: {models[:5]}")
+                    print(f"     Fix: ollama pull {DEFAULT_MODEL}")
+            else:
+                print(f"  ⚠️  Ollama HTTP {r.status_code} — is it running?")
+        except Exception as e:
+            print(f"  ❌ Ollama unreachable at {OLLAMA_BASE_URL}")
+            print(f"     Fix: ollama serve && ollama pull {DEFAULT_MODEL}")
+            print(f"     ({e})")
+            ok = False
+        return ok
+
+    if serve:
+        async def _serve():
+            print("=== Sonic preflight ===")
+            ok = await _preflight()
+            if not ok:
+                print("\n🔴 Fix issues above, then retry --serve")
+                return
+            if dry_run:
+                print(f"\n🔵 [dry-run] Would bind ws://{SONIC_HOST}:{SONIC_PORT}/v1/responses")
+                print(f"   Backend={OLLAMA_BASE_URL}  Model={DEFAULT_MODEL}")
+                return
+            server = SonicServer()
+            print(f"\n🎵 Sonic gateway → ws://{SONIC_HOST}:{SONIC_PORT}/v1/responses")
+            print(f"   Backend: {OLLAMA_BASE_URL}  Model: {DEFAULT_MODEL}  Verbose: {verbose}")
+            await server.start()
+        asyncio.run(_serve())
     else:
-        # Quick smoke test
+        # No --serve: preflight + optional smoke-test
         async def _test():
-            print("Sonic smoke test — connecting to", SONIC_WS_URL)
-            async with SonicClient() as c:
-                print("Asking: 'What is 2+2?'")
-                async for tok in c.stream("What is 2+2? Answer in one word."):
-                    print(tok, end="", flush=True)
-            print("\n✅ Done")
+            print("=== Sonic preflight ===")
+            ok = await _preflight()
+            if not ok:
+                print("\n🔴 Fix above, then: python -m ... --serve")
+                return
+            if dry_run:
+                print("\n🔵 [dry-run] Preflight OK — not connecting (server not running in dry-run).")
+                return
+            print(f"\n→ Smoke-test: {SONIC_WS_URL}")
+            try:
+                async with SonicClient() as c:
+                    async for tok in c.stream("What is 2+2? One word."):
+                        print(tok, end="", flush=True)
+                print("\n✅ Smoke-test passed")
+            except Exception as e:
+                print(f"\n❌ {e}")
+                print("   Tip: start server first with --serve in a separate terminal.")
         asyncio.run(_test())
