@@ -375,11 +375,25 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
         # ── Log interaction for self-improve loop ────────────────────────
+        # Detect correction: user negates/corrects the previous bot response
+        _CORRECTION_PREFIXES = (
+            "нет", "не так", "не верно", "неверно", "неправильно",
+            "no,", "nope", "wrong", "that's wrong", "incorrect",
+            "not right", "not what", "stop", "стоп",
+        )
+        _prev_history = ctx.user_data.get("history", [])
+        _last_bot = next(
+            (m["content"] for m in reversed(_prev_history) if m["role"] == "assistant"), None
+        )
+        _was_corrected = bool(
+            _last_bot and user_msg.lower().strip().startswith(_CORRECTION_PREFIXES)
+        )
         try:
             log_interaction(
                 user_input=user_msg,
                 agent_response=reply,
                 session_id=str(update.effective_chat.id),
+                was_corrected=_was_corrected,
             )
         except Exception as log_err:
             logger.warning(f"log_interaction failed: {log_err}")
