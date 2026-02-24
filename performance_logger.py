@@ -23,6 +23,28 @@ def _ensure_dir():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _rotate_log_if_needed(max_mb: float = 5.0):
+    """Rotate performance_log.jsonl when it exceeds max_mb. Keeps last 3 archives."""
+    if not PERF_LOG.exists():
+        return
+    size_mb = PERF_LOG.stat().st_size / (1024 * 1024)
+    if size_mb < max_mb:
+        return
+    archive_dir = DATA_DIR / "log_archives"
+    archive_dir.mkdir(exist_ok=True)
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    archive_path = archive_dir / f"performance_log_{ts}.jsonl"
+    import shutil
+    shutil.copy2(PERF_LOG, archive_path)
+    PERF_LOG.write_text("", encoding="utf-8")  # Truncate
+    # Keep only last 3 archives
+    archives = sorted(archive_dir.glob("performance_log_*.jsonl"))
+    for old in archives[:-3]:
+        old.unlink()
+    import logging as _log
+    _log.getLogger(__name__).info(f"[PerfLog] Rotated log → {archive_path.name} ({size_mb:.1f}MB)")
+
+
 def log_interaction(
     user_input: str,
     agent_response: str,
@@ -44,6 +66,7 @@ def log_interaction(
         tags:            Topic tags (e.g. ['solana', 'trading', 'sleep_cycle'])
     """
     _ensure_dir()
+    _rotate_log_if_needed()  # Auto-rotate at 5MB
     entry = {
         "ts": datetime.utcnow().isoformat(),
         "date": date.today().isoformat(),
@@ -139,21 +162,89 @@ Format as JSON with keys: patterns, preferences, soul_updates, gaps"""
         return {"status": "error", "error": str(e), "correction_rate": correction_rate}
 
 
+_LOCKED_MARKER = "[LOCKED]"
+_ROLLBACK_THRESHOLD = 0.10  # Rollback if correction_rate worsens by >10pp
+
+
+def _extract_locked_sections(soul_text: str) -> list[tuple[int, int]]:
+    """Return (start, end) line ranges that are marked [LOCKED] — LLM must not modify."""
+    locked_ranges = []
+    lines = soul_text.splitlines(keepends=True)
+    i = 0
+    while i < len(lines):
+        if _LOCKED_MARKER in lines[i]:
+            start = i
+            # Lock extends until next section header (##) or EOF
+            j = i + 1
+            while j < len(lines) and not (lines[j].startswith("##") or lines[j].startswith("# ")):
+                j += 1
+            locked_ranges.append((start, j))
+            i = j
+        else:
+            i += 1
+    return locked_ranges
+
+
+def _strip_locked_content(soul_text: str) -> str:
+    """Remove [LOCKED] markers from soul text for display/analysis (does not modify file)."""
+    return "\n".join(
+        l for l in soul_text.splitlines() if _LOCKED_MARKER not in l
+    )
+
+
 def update_soul_with_patterns(patterns_result: dict, soul_path: Path = SOUL_PATH):
     """
     Append learned patterns to god_soul.md under [LEARNED_PATTERNS] section.
+    - Respects [LOCKED] sections — never overwrites them
+    - Creates a pre-update backup (god_soul.md.bak) for rollback
+    - Rolls back if correction_rate worsens by >10pp vs previous snapshot
     Creates the section if it doesn't exist. Idempotent — checks for duplicates.
     """
+    import logging as _log
+    import shutil as _shutil
+    logger = _log.getLogger(__name__)
+
     if patterns_result.get("status") != "ok":
         return False
     soul_updates = patterns_result.get("soul_updates", [])
     if not soul_updates:
         return False
 
+    _ensure_dir()
     content = soul_path.read_text(encoding="utf-8") if soul_path.exists() else ""
 
+    # ── Check rollback condition ─────────────────────────────────────────────
+    snapshots_path = DATA_DIR / "patterns_history.jsonl"
+    if snapshots_path.exists():
+        try:
+            snap_lines = [l for l in snapshots_path.read_text().splitlines() if l.strip()]
+            if snap_lines:
+                prev = json.loads(snap_lines[-1])
+                prev_rate = float(prev.get("correction_rate") or 0)
+                curr_rate = float(patterns_result.get("correction_rate") or 0)
+                if prev_rate > 0 and (curr_rate - prev_rate) > _ROLLBACK_THRESHOLD:
+                    # Correction rate INCREASED → degradation → rollback
+                    bak = soul_path.with_suffix(".md.bak")
+                    if bak.exists():
+                        _shutil.copy2(bak, soul_path)
+                        logger.warning(
+                            f"[SoulRollback] correction_rate degraded "
+                            f"{prev_rate:.1%} → {curr_rate:.1%} (>{_ROLLBACK_THRESHOLD:.0%}pp). "
+                            f"Rolled back god_soul.md from .bak"
+                        )
+                        return False
+        except Exception as _re:
+            logger.warning(f"[SoulRollback] check failed: {_re}")
+
+    # ── Snapshot before update (for rollback next cycle) ────────────────────
+    if soul_path.exists():
+        _shutil.copy2(soul_path, soul_path.with_suffix(".md.bak"))
+
+    # ── Build new block — skip anything that touches [LOCKED] lines ─────────
     timestamp = datetime.utcnow().strftime("%Y-%m-%d")
     new_block = f"\n\n## [LEARNED_PATTERNS] — Auto-updated {timestamp}\n"
+    locked_ranges = _extract_locked_sections(content)
+
     for update in soul_updates:
         if update not in content:  # Deduplicate
             new_block += f"- {update}\n"
@@ -161,11 +252,22 @@ def update_soul_with_patterns(patterns_result: dict, soul_path: Path = SOUL_PATH
     if new_block.strip() == f"## [LEARNED_PATTERNS] — Auto-updated {timestamp}":
         return False  # Nothing new to add
 
+    # Verify we're not about to overwrite a [LOCKED] section
+    # (appending is safe; only flag if soul_path has [LOCKED] in [LEARNED_PATTERNS] area)
+    if locked_ranges:
+        soul_lines = content.splitlines()
+        learned_start = next(
+            (i for i, l in enumerate(soul_lines) if "[LEARNED_PATTERNS]" in l), None
+        )
+        for (ls, le) in locked_ranges:
+            if learned_start is not None and ls >= learned_start:
+                logger.warning("[SoulUpdate] Skipping update — [LOCKED] marker inside [LEARNED_PATTERNS]")
+                return False
+
     with soul_path.open("a", encoding="utf-8") as f:
         f.write(new_block)
 
-    # Also save patterns snapshot to data dir
-    _ensure_dir()
+    # ── Save patterns snapshot ───────────────────────────────────────────────
     snapshot = {
         "date": timestamp,
         "correction_rate": patterns_result.get("correction_rate"),
@@ -173,11 +275,12 @@ def update_soul_with_patterns(patterns_result: dict, soul_path: Path = SOUL_PATH
         "preferences": patterns_result.get("preferences"),
         "soul_updates": soul_updates,
         "gaps": patterns_result.get("gaps"),
+        "rollback_bak": str(soul_path.with_suffix(".md.bak")),
     }
-    snapshots_path = DATA_DIR / "patterns_history.jsonl"
     with snapshots_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(snapshot, ensure_ascii=False) + "\n")
 
+    logger.info(f"[SoulUpdate] {len(soul_updates)} patterns written. Backup: god_soul.md.bak")
     return True
 
 
