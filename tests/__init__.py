@@ -1,1 +1,0 @@
-# GodLocal test suite
