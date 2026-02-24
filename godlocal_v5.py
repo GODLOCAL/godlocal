@@ -306,9 +306,38 @@ class SleepCycle:
             logger.warning(f"[PerfLogger] skipped: {e}")
             report["performance"] = {"error": str(e)}
 
-        # Append lessons to tasks/lessons.md
+        # Phase 3b — Prune god_soul.md [LEARNED_PATTERNS] if >50 lines
+        # Prevents unbounded growth of the soul file over time
+        try:
+            from pathlib import Path as _SPath
+            import re as _re
+            _soul_path = _SPath("god_soul.md")
+            if _soul_path.exists():
+                _soul_text = _soul_path.read_text(encoding="utf-8")
+                _pat_match = _re.search(
+                    r"(\[LEARNED_PATTERNS\])(.*?)(?=^\[|\Z)",
+                    _soul_text, _re.DOTALL | _re.MULTILINE
+                )
+                if _pat_match:
+                    _section = _pat_match.group(2)
+                    _lines = [l for l in _section.splitlines() if l.strip()]
+                    if len(_lines) > 50:
+                        logger.info(f"✂️  Pruning god_soul.md [LEARNED_PATTERNS]: {len(_lines)} lines → compressing")
+                        _prune_prompt = (
+                            f"You are compressing an AI agent's learned patterns. "                            f"Distill the following {len(_lines)} pattern entries into "                            f"the 10 most important, actionable, distinct insights. "                            f"Return only the 10 lines, one per line, no numbering.\n\n"
+                            + "\n".join(_lines)
+                        )
+                        _compressed = self.llm.complete(_prune_prompt, max_tokens=500).strip()
+                        _new_soul = _soul_text[:_pat_match.start(2)] + "\n" + _compressed + "\n" + _soul_text[_pat_match.end(2):]
+                        _soul_path.write_text(_new_soul, encoding="utf-8")
+                        logger.info("✅ god_soul.md [LEARNED_PATTERNS] pruned to top-10")
+        except Exception as _pe:
+            logger.warning(f"[SoulPrune] skipped: {_pe}")
+
+        # Append lessons to tasks/lessons.md + weekly stats snapshot
         try:
             from pathlib import Path as _Path
+            import datetime as _ldt
             lessons_path = _Path("tasks/lessons.md")
             if lessons_path.exists() and report.get("self_evolve"):
                 se = report["self_evolve"]
@@ -318,10 +347,38 @@ class SleepCycle:
                         f"- Self-evolve: {se.get('gaps_resolved')}/{se.get('gaps_found')} gaps resolved\n"
                         f"- Topics: {se.get('topics', [])}\n"
                     )
-                    if report.get("performance", {}).get("correction_rate"):
+                    if report.get("performance", {}).get("correction_rate") is not None:
                         entry += f"- Correction rate: {report['performance']['correction_rate']:.1%}\n"
                     with lessons_path.open("a", encoding="utf-8") as f_lessons:
                         f_lessons.write(entry)
+
+            # Weekly baseline snapshot — every Monday write full stats to lessons.md
+            if _ldt.datetime.utcnow().weekday() == 0:  # Monday
+                try:
+                    from performance_logger import get_stats
+                    _stats = get_stats(days=7)
+                    _snap = (
+                        f"\n## [{report['date']}] — Weekly Stats Snapshot\n"
+                        f"- Total interactions: {_stats.get('total', 0)}\n"
+                        f"- Corrected: {_stats.get('corrected', 0)} ({_stats.get('correction_rate', 0):.1%})\n"
+                        f"- Sessions: {_stats.get('sessions', 0)}\n"
+                        f"- Avg response length: {_stats.get('avg_response_len', 0):.0f} chars\n"
+                    )
+                    with lessons_path.open("a", encoding="utf-8") as f_lessons:
+                        f_lessons.write(_snap)
+                    logger.info("📈 Weekly stats snapshot written to tasks/lessons.md")
+                except Exception as _se:
+                    logger.warning(f"[WeeklySnapshot] skipped: {_se}")
+
+            # Save last-run timestamp for startup catchup logic
+            try:
+                import json as _json
+                _Path("godlocal_data").mkdir(exist_ok=True)
+                _Path("godlocal_data/sleep_cycle_state.json").write_text(
+                    _json.dumps({"last_run": report["date"]}), encoding="utf-8"
+                )
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -502,6 +559,30 @@ async def startup():
                       hour=CFG.SLEEP_CYCLE_HOUR, minute=0, id="sleep_cycle")
         sched.start()
         logger.info(f"⏰ sleep_cycle() scheduled at {CFG.SLEEP_CYCLE_HOUR}:00 UTC")
+
+    # ── Startup fallback: run sleep_cycle if >24h since last execution ───────
+    # Handles Steam Deck / offline scenarios where cron didn't fire
+    try:
+        import asyncio as _asyncio
+        from pathlib import Path as _Path
+        import json as _json, datetime as _dt
+        _state_path = _Path("godlocal_data/sleep_cycle_state.json")
+        _last_run = None
+        if _state_path.exists():
+            try:
+                _state = _json.loads(_state_path.read_text())
+                _last_run = _dt.datetime.fromisoformat(_state.get("last_run", ""))
+            except Exception:
+                pass
+        _now = _dt.datetime.utcnow()
+        if _last_run is None or (_now - _last_run).total_seconds() > 86400:
+            logger.info("⏰ sleep_cycle() startup catchup triggered (>24h since last run)")
+            _asyncio.get_event_loop().run_in_executor(None, agent.run_sleep_cycle)
+        else:
+            _delta = _now - _last_run
+            logger.info(f"✅ sleep_cycle() recent ({_delta.seconds//3600}h ago), skipping catchup")
+    except Exception as _e:
+        logger.warning(f"[startup catchup] skipped: {_e}")
 
 
 @app.get("/")
