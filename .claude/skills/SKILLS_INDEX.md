@@ -47,3 +47,6 @@
 - getsentry/create-pr                     # PR creation best practices
 - openai/yeet                             # stage + commit + push + open PR
 - openai/gh-fix-ci                        # debug failing GitHub Actions
+
+## AI Models / Generative
+- replicate/replicate                     # 100K+ models: image, LLM, audio, video
