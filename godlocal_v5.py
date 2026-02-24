@@ -393,6 +393,36 @@ class SleepCycle:
         except Exception:
             pass
 
+
+        # Phase 4 — AutoGenesis: self-evolve the codebase itself
+        # Runs AFTER soul/memory consolidation — uses fresh patterns as context
+        try:
+            from oasis_autogenesis import AutoGenesis
+            _autogenesis = AutoGenesis(root=".")
+            _ag_tasks = [
+                "Review performance patterns from last 24h and optimise the most frequent code paths",
+                "Check for any new TODO/FIXME comments added today and resolve the simplest one",
+            ]
+            # Only run one task per cycle to keep nightly window < 5 min
+            _ag_task = _ag_tasks[report.get("cycle_count", 0) % len(_ag_tasks)]
+            _ag_result = _autogenesis.evolve(_ag_task, apply=False)  # dry-run: show diff, don't apply
+            report["autogenesis"] = {
+                "task":           _ag_task,
+                "proposed_files": _ag_result.get("proposed_files", []),
+                "surprise":       _ag_result.get("fep", {}).get("surprise", 0),
+                "free_energy":    _ag_result.get("fep", {}).get("free_energy", 0),
+                "elapsed_s":      _ag_result.get("elapsed_s", 0),
+                "apply":          False,  # flip to True when you trust it fully
+            }
+            logger.info(
+                f"🧬 AutoGenesis: proposed={_ag_result.get('proposed_files')} "
+                f"surprise={_ag_result.get('fep', {}).get('surprise', 0)} "
+                f"(dry-run — set apply=True to auto-patch)"
+            )
+        except Exception as _age:
+            logger.warning(f"[AutoGenesis] skipped: {_age}")
+            report["autogenesis"] = {"error": str(_age)}
+
         return report
 
 
