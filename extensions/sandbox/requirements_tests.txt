@@ -1,0 +1,22 @@
+# GodLocal v5 — Python dependencies
+
+# Core
+python-telegram-bot>=20.0
+httpx>=0.24.0
+
+# API server (godlocal_v5.py)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Memory
+chromadb>=0.4.0
+
+# LLM (Ollama client)
+ollama>=0.1.0
+
+# Self-evolve
+schedule>=1.2.0
+# Sandbox test extras
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+docker>=6.1.0

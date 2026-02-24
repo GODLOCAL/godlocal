@@ -1,27 +1,23 @@
-# GodLocal v5 — Python dependencies
-
-# Core
-python-telegram-bot>=20.0
-httpx>=0.24.0
-
 # API server (godlocal_v5.py)
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-
-# Memory
-chromadb>=0.4.0
-
-# LLM (Ollama client)
-ollama>=0.1.0
-
-# Self-evolve
-schedule>=1.2.0
-
 # Connectors (500+ integrations — ConnectorsModule)
-composio-core>=0.7
-
+# Core
+# Docker sandbox
+# GodLocal v5 — Python dependencies
+# LLM (Ollama client)
 # MCP client (Paper Desktop + other MCP servers)
-mcp>=1.0.0
-
+# Memory
+# Self-evolve
 # Sonic gateway (WebSocket streaming server + client)
+# X-ZERO connectors
+chromadb>=0.4.0
+composio-core>=0.7
+docker>=6.1.0
+fastapi>=0.104.0
+httpx>=0.24.0
+mcp>=1.0.0
+ollama>=0.1.0
+python-telegram-bot>=20.0
+requests>=2.31.0
+schedule>=1.2.0
+uvicorn[standard]>=0.24.0
 websockets>=12.0
