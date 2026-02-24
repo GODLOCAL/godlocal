@@ -186,3 +186,17 @@ See [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md).
 
 *Built by Rostyslav Oliinyk*  
 *Part of the [X100 OASIS](https://x100-app.vercel.app) ecosystem*
+
+---
+
+## Mobile — iPhone On-Device AI
+
+Run LFM2 24B or PARO 4B entirely on iPhone 17 Pro (A19 Pro, 12GB RAM). No cloud.
+
+```bash
+cd mobile && ./setup_nexa.sh   # downloads NexaSdk.xcframework + activates code
+```
+
+Then drag `NexaSdk.xcframework` into Xcode → **Embed & Sign** → **Cmd+R**.
+
+→ [Full mobile setup guide](mobile/README.md) | ~40 tok/s LFM2 / ~60 tok/s PARO 4B
