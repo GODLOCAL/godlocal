@@ -635,6 +635,16 @@ class SoulReq(BaseModel):
     content: Optional[str] = None
 
 
+# ── ConnectorsModule ──────────────────────────────────────────────────────────
+try:
+    from extensions.connectors.connectors_module import ConnectorsModule
+    _connectors = ConnectorsModule(llm=getattr(agent, "llm", None))
+    _connectors.mount(app)
+    logger.info("[GodLocal] ConnectorsModule mounted ✓ — /connectors/* live")
+except Exception as _cm_err:
+    logger.warning(f"[GodLocal] ConnectorsModule not loaded: {_cm_err}")
+    _connectors = None
+
 @app.on_event("startup")
 async def startup():
     global agent
@@ -759,6 +769,7 @@ if __name__ == "__main__":
 ║  Medical     → Load godlocal_v5_modules.py               ║
 ║  Sleep       → POST /sleep         (hippocampal)         ║
 ║  Docs        →  GET /docs                                ║
+║  Connectors  →  GET /connectors   (500+ integrations)    ║
 ║  GitHub      → github.com/GODLOCAL/godlocal               ║
 ╙══════════════════════════════════════════════════════════╒
 """)

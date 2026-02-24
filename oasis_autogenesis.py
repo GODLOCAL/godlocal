@@ -739,7 +739,7 @@ Output JSON only (no markdown):
             "files_to_touch": [],
         }
 
-    def evolve(self, task: str, apply: bool = False, max_tokens: int = 3000) -> dict:
+    def evolve(self, task: str, apply: bool = False, max_tokens: int = 3000, max_revisions: int = 2) -> dict:
         """
         Run one evolution cycle.
 
@@ -831,6 +831,71 @@ Output [PLAN] block first, then patches.
             except Exception:
                 pass
 
+        revision_log = []
+        # 9. Plan-and-Execute revision loop (LangGraph-style)
+        # If nothing was applied and apply=True, revise plan + retry (up to max_revisions)
+        if apply and max_revisions > 0 and not any(r.get("applied") for r in results):
+            for rev_num in range(1, max_revisions + 1):
+                logger.info(f"  [Revision {rev_num}/{max_revisions}] No patches applied — revising plan...")
+                # Re-snapshot + re-compute FEP to get fresh signal
+                fresh_codebase = self.scanner.load()
+                fresh_fep = self.fep.compute_surprise(fresh_codebase)
+
+                # Build revision context: what went wrong
+                failed_reasons = [r.get("reason", "unknown") for r in results if not r.get("applied")]
+                revision_context = f"""
+REVISION {rev_num} — Previous attempt failed.
+Failed reasons: {failed_reasons}
+Previous proposed files: {list(proposed.keys())}
+Original task: {task}
+
+Re-examine what exactly needs to change. The SEARCH blocks may not have matched.
+Use smaller, more targeted SEARCH/REPLACE blocks. Focus on a single change.
+"""
+                rev_prompt = f"""{self.SYSTEM_PROMPT}
+
+## Soul
+{self.soul[:500]}
+
+## FEP (fresh)
+- Surprise: {fresh_fep['surprise']} | Free Energy: {fresh_fep['free_energy']}
+
+## Current Codebase
+{self.scanner.context_window(max_chars=8000)}
+
+## Task
+{task}
+
+## Revision Context
+{revision_context}
+"""
+                t_rev = time.time()
+                rev_response = self.llm.generate(rev_prompt, max_tokens=max_tokens)
+                rev_elapsed = round(time.time() - t_rev, 1)
+                logger.info(f"  Revision {rev_num} response in {rev_elapsed}s")
+
+                rev_proposed = self.safe_apply.parse_llm_output(rev_response)
+                rev_results = []
+                for fname, content in rev_proposed.items():
+                    r = self.safe_apply.apply(fname, content, dry_run=False)  # apply=True in revision
+                    rev_results.append(r)
+
+                revision_log.append({
+                    "revision": rev_num,
+                    "proposed": list(rev_proposed.keys()),
+                    "applied": [r["filename"] for r in rev_results if r.get("applied")],
+                    "elapsed_s": rev_elapsed,
+                })
+
+                if any(r.get("applied") for r in rev_results):
+                    logger.info(f"  [Revision {rev_num}] ✓ Applied on revision attempt")
+                    results = rev_results
+                    response = rev_response
+                    proposed = rev_proposed
+                    break
+                else:
+                    logger.warning(f"  [Revision {rev_num}] Still no patches applied")
+
         return {
             "task": task,
             "evolution": self.evolution_count,
@@ -840,6 +905,7 @@ Output [PLAN] block first, then patches.
             "applied": [r for r in results if r.get("applied")],
             "elapsed_s": elapsed,
             "llm_response": response,
+            "revisions": revision_log,
         }
 
     def _log(self, task: str, fep: dict, response: str, results: list) -> None:
