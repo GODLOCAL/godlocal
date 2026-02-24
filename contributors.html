@@ -1,279 +1,174 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Contributors — БОГ || OASIS</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<title>GODLOCAL — Contributors</title>
+
 <style>
-  :root {
-    --green:  #00FF41;
-    --cyan:   #00E5FF;
-    --purple: #7B2FFF;
-    --bg:     #050505;
-    --panel:  #0d0d0d;
-    --border: #1a1a1a;
-    --text:   #cccccc;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #050510;
+  --neon-pink: #ff00ff;
+  --neon-blue: #00f0ff;
+  --glass: rgba(255,255,255,0.05);
+}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Courier New', monospace;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 60px 20px 80px;
-  }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", sans-serif;
+}
 
-  /* ── Matrix rain bg ── */
-  canvas#rain {
-    position: fixed; top: 0; left: 0;
-    width: 100%; height: 100%;
-    z-index: 0; opacity: 0.04; pointer-events: none;
-  }
+body {
+  background: radial-gradient(circle at center, #0a0a1f 0%, #000 70%);
+  color: white;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
 
-  .content { position: relative; z-index: 1; width: 100%; max-width: 900px; }
+header {
+  text-align: center;
+  padding: 60px 20px 20px;
+}
 
-  /* ── Header ── */
-  .logo {
-    text-align: center;
-    margin-bottom: 8px;
-    font-size: 28px;
-    font-weight: bold;
-    color: var(--green);
-    letter-spacing: 4px;
-    text-shadow: 0 0 20px rgba(0,255,65,0.6);
-  }
-  .logo span { color: var(--cyan); }
-  .tagline {
-    text-align: center;
-    color: #333;
-    font-size: 13px;
-    letter-spacing: 2px;
-    margin-bottom: 50px;
-  }
+h1 {
+  font-size: 3rem;
+  background: linear-gradient(90deg, var(--neon-blue), var(--neon-pink));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 20px var(--neon-blue);
+}
 
-  /* ── Grid ── */
-  #grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 50px;
-  }
+.subtitle {
+  opacity: 0.7;
+  margin-top: 10px;
+}
 
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 24px 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    text-decoration: none;
-    color: var(--text);
-    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
-    animation: fadeIn 0.4s ease both;
-  }
-  .card:hover {
-    border-color: var(--cyan);
-    transform: translateY(-3px);
-    box-shadow: 0 8px 30px rgba(0,229,255,0.08);
-  }
+.counter {
+  margin-top: 20px;
+  font-size: 1.2rem;
+  color: var(--neon-blue);
+}
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 25px;
+  padding: 60px;
+}
 
-  .card img {
-    width: 72px; height: 72px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    transition: border-color 0.2s;
-  }
-  .card:hover img { border-color: var(--cyan); }
+.card {
+  background: var(--glass);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 25px;
+  text-align: center;
+  transition: 0.3s;
+  position: relative;
+}
 
-  .card .name {
-    font-size: 13px;
-    color: var(--green);
-    font-weight: bold;
-    letter-spacing: 1px;
-    text-align: center;
-  }
-  .card .handle {
-    font-size: 11px;
-    color: #444;
-  }
-  .card .commits {
-    font-size: 11px;
-    color: var(--purple);
-    border: 1px solid var(--purple);
-    padding: 2px 8px;
-    border-radius: 10px;
-  }
+.card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 0 20px var(--neon-pink);
+}
 
-  /* ── CTA ── */
-  .cta {
-    text-align: center;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 32px;
-    background: var(--panel);
-  }
-  .cta p {
-    color: #555;
-    font-size: 13px;
-    margin-bottom: 16px;
-    line-height: 1.7;
-  }
-  .cta-links { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .cta-btn {
-    padding: 9px 20px;
-    font-family: inherit;
-    font-size: 12px;
-    letter-spacing: 1px;
-    cursor: pointer;
-    border-radius: 4px;
-    text-decoration: none;
-    transition: all 0.2s;
-  }
-  .cta-btn.primary {
-    background: var(--green);
-    color: #000;
-    border: none;
-    font-weight: bold;
-  }
-  .cta-btn.primary:hover { opacity: 0.85; }
-  .cta-btn.secondary {
-    background: transparent;
-    color: var(--cyan);
-    border: 1px solid var(--cyan);
-  }
-  .cta-btn.secondary:hover { background: rgba(0,229,255,0.08); }
+.card img {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 2px solid var(--neon-blue);
+  box-shadow: 0 0 15px var(--neon-blue);
+  margin-bottom: 15px;
+}
 
-  /* ── Footer ── */
-  footer {
-    margin-top: 50px;
-    text-align: center;
-    font-size: 11px;
-    color: #222;
-    letter-spacing: 1px;
-  }
-  footer a { color: #333; text-decoration: none; }
-  footer a:hover { color: var(--green); }
+.card a {
+  color: white;
+  text-decoration: none;
+  font-weight: bold;
+}
 
-  /* ── Loader ── */
-  #loader {
-    text-align: center;
-    color: #333;
-    padding: 40px;
-    font-size: 13px;
-    grid-column: 1/-1;
-  }
+.commits {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  color: var(--neon-pink);
+}
+
+footer {
+  text-align: center;
+  padding: 40px 20px;
+  opacity: 0.5;
+  font-size: 0.9rem;
+}
+.loader {
+  text-align: center;
+  margin-top: 60px;
+  font-size: 1.2rem;
+  color: var(--neon-blue);
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
 </style>
 </head>
+
 <body>
 
-<canvas id="rain"></canvas>
+<header>
+  <h1>CONTRIBUTORS</h1>
+  <div class="subtitle">Built in the Open · Powered by GODLOCAL</div>
+  <div class="counter" id="counter"></div>
+</header>
 
-<div class="content">
-  <div class="logo">БОГ&nbsp;||&nbsp;<span>OASIS</span></div>
-  <div class="tagline">CONTRIBUTORS — BUILT IN THE OPEN</div>
+<div class="loader" id="loader">Loading neural network...</div>
+<div class="grid" id="contributorsGrid"></div>
 
-  <div id="grid">
-    <div id="loader">loading contributors…</div>
-  </div>
-
-  <div class="cta">
-    <p>
-      Want to be part of this?<br/>
-      Submit a PR, open an issue, or reach out directly.
-    </p>
-    <div class="cta-links">
-      <a class="cta-btn primary"
-         href="https://github.com/GODLOCAL/godlocal/pulls"
-         target="_blank">OPEN PR</a>
-      <a class="cta-btn secondary"
-         href="https://twitter.com/kitbtc"
-         target="_blank">@kitbtc</a>
-      <a class="cta-btn secondary"
-         href="https://t.me/provodnikro"
-         target="_blank">Telegram</a>
-    </div>
-  </div>
-
-  <footer>
-    <a href="https://github.com/GODLOCAL/godlocal" target="_blank">github.com/GODLOCAL/godlocal</a>
-    &nbsp;·&nbsp; MIT / AGPL-3.0
-  </footer>
-</div>
+<footer>
+  GODLOCAL · Open Source AI · MIT / AGPL-3.0
+</footer>
 
 <script>
-// ── Matrix rain ───────────────────────────────────────────────────────────────
-(function(){
-  const c = document.getElementById('rain');
-  const ctx = c.getContext('2d');
-  function resize(){ c.width = innerWidth; c.height = innerHeight; }
-  resize(); window.addEventListener('resize', resize);
-  const chars = 'アイウエオカキクケコ01БОГ#$%<>';
-  let drops = Array.from({length: Math.floor(innerWidth/14)}, () => Math.random() * 50 | 0);
-  setInterval(() => {
-    ctx.fillStyle = 'rgba(5,5,5,0.05)';
-    ctx.fillRect(0,0,c.width,c.height);
-    ctx.fillStyle = '#00FF41';
-    ctx.font = '13px Courier New';
-    drops.forEach((y, i) => {
-      ctx.fillText(chars[Math.random()*chars.length|0], i*14, y*14);
-      if(y*14 > c.height && Math.random() > 0.975) drops[i] = 0;
-      else drops[i]++;
-    });
-  }, 60);
-})();
+const repoOwner = "GODLOCAL";
+const repoName = "godlocal";
 
-// ── Load contributors from GitHub API ────────────────────────────────────────
 async function loadContributors() {
-  const REPO = 'GODLOCAL/godlocal';
-  const grid = document.getElementById('grid');
-
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/contributors?per_page=100`);
-    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
-    const contributors = await res.json();
+    const response = await fetch(
+      `https://api.github.com/repos/${repoOwner}/${repoName}/contributors`
+    );
+    const data = await response.json();
 
-    grid.innerHTML = '';
+    const grid = document.getElementById("contributorsGrid");
+    const counter = document.getElementById("counter");
+    const loader = document.getElementById("loader");
 
-    contributors.forEach((c, i) => {
-      const card = document.createElement('a');
-      card.className = 'card';
-      card.href = c.html_url;
-      card.target = '_blank';
-      card.style.animationDelay = `${i * 60}ms`;
+    loader.style.display = "none";
+    counter.innerText = `${data.length} Contributors Connected`;
 
-      const commitLabel = c.contributions === 1 ? '1 commit' : `${c.contributions} commits`;
-
+    data.forEach(user => {
+      const card = document.createElement("div");
+      card.className = "card";
       card.innerHTML = `
-        <img src="${c.avatar_url}&s=144" alt="${c.login}" loading="lazy" />
-        <div class="name">${c.login}</div>
-        <div class="handle">@${c.login}</div>
-        <div class="commits">${commitLabel}</div>
+        <img src="${user.avatar_url}" alt="${user.login}" />
+        <a href="${user.html_url}" target="_blank">${user.login}</a>
+        <div class="commits">${user.contributions} commits</div>
       `;
       grid.appendChild(card);
     });
 
-    if (contributors.length === 0) {
-      grid.innerHTML = '<div id="loader" style="color:#333">no contributors yet — be the first</div>';
-    }
-
-  } catch(err) {
-    console.error(err);
-    grid.innerHTML = `<div id="loader" style="color:#f44">failed to load: ${err.message}</div>`;
+  } catch (error) {
+    document.getElementById("loader").innerText =
+      "Failed to connect to GitHub API.";
   }
 }
 
 loadContributors();
 </script>
+
 </body>
 </html>
