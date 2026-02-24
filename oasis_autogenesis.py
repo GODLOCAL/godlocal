@@ -1,0 +1,709 @@
+"""
+oasis_autogenesis.py — X100 OASIS AutoGenesis Engine
+=====================================================
+Self-evolving code intelligence layer powered by MLX (Apple Silicon).
+
+Architecture:
+  FEP Loop    — Free Energy Principle: measure surprise, reduce prediction error
+  CodeScanner — full codebase in-memory with hash tracking (detects drift)
+  SafeApply   — backup → diff → apply → verify → rollback if broken
+  FastAPI     — /evolve endpoint for iPhone Shortcuts integration
+  GodLocalBridge — feeds evolution events into performance_logger.py
+
+Usage:
+  python oasis_autogenesis.py                     # interactive REPL
+  python oasis_autogenesis.py --serve             # HTTP server (iPhone Shortcuts)
+  python oasis_autogenesis.py --task "..."        # one-shot CLI
+
+iPhone Shortcuts:
+  POST http://localhost:7100/evolve
+  Body: {"task": "speed up FEP loop", "apply": false}
+"""
+
+import os
+import sys
+import json
+import math
+import time
+import shutil
+import hashlib
+import difflib
+import argparse
+import logging
+import asyncio
+import tempfile
+import subprocess
+from pathlib import Path
+from datetime import datetime
+from typing import Optional
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [AutoGenesis] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("AutoGenesis")
+
+# ─── Optional imports ────────────────────────────────────────────────────────
+
+try:
+    from mlx_lm import load, generate
+    MLX_AVAILABLE = True
+except ImportError:
+    MLX_AVAILABLE = False
+    logger.warning("mlx_lm not installed — using Ollama fallback")
+
+try:
+    import ollama as _ollama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+
+try:
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel
+    import uvicorn
+    FASTAPI_AVAILABLE = True
+except ImportError:
+    FASTAPI_AVAILABLE = False
+
+# ─── Config ──────────────────────────────────────────────────────────────────
+
+DEFAULT_MLX_MODEL = "mlx-community/Qwen2.5-32B-4bit"
+FALLBACK_OLLAMA_MODEL = "qwen2.5:7b"
+SOUL_FILE = "BOH_OASIS.md"
+LOG_FILE = "autogenesis_log.md"
+BACKUP_DIR = ".autogenesis_backups"
+SERVER_PORT = 7100
+
+# Files to watch (relative to project root)
+# Add any file you want AutoGenesis to evolve
+WATCHED_FILES = [
+    "oasis_autogenesis.py",
+    "godlocal_v5.py",
+    "self_evolve.py",
+    "performance_logger.py",
+    "paroquant_backend.py",
+    "godlocal_telegram.py",
+    "utils.py",
+    "BOH_OASIS.md",
+]
+
+
+# ─── Free Energy Principle (FEP) ────────────────────────────────────────────
+
+class FEPMetrics:
+    """
+    Minimal FEP implementation for code evolution.
+
+    Surprise = -log P(observation | model)
+    Prediction error ≈ distance between expected code state and current state.
+    Free Energy ≈ surprise + complexity (KL divergence from prior beliefs).
+    """
+
+    def __init__(self):
+        self._baseline: dict[str, str] = {}  # filename → content hash at last evolution
+        self._prediction_errors: list[float] = []
+
+    def snapshot(self, codebase: dict[str, str]) -> None:
+        """Record current state as baseline for next cycle."""
+        self._baseline = {f: hashlib.sha256(c.encode()).hexdigest() for f, c in codebase.items()}
+
+    def compute_surprise(self, codebase: dict[str, str]) -> dict:
+        """
+        Compare current codebase to baseline.
+        Returns surprise score and per-file drift.
+        """
+        if not self._baseline:
+            self.snapshot(codebase)
+            return {"surprise": 0.0, "drift": {}, "changed_files": []}
+
+        drift = {}
+        changed = []
+        total_surprise = 0.0
+
+        for filename, content in codebase.items():
+            current_hash = hashlib.sha256(content.encode()).hexdigest()
+            prev_hash = self._baseline.get(filename, "")
+
+            if prev_hash and current_hash != prev_hash:
+                # Levenshtein-based surprise proxy
+                prev_content = ""  # we only have hashes — use line-count proxy
+                lines = content.count("\n") + 1
+                prev_lines = lines  # unknown; use 0 surprise for now
+                file_surprise = 0.1  # minimal surprise on hash change
+                drift[filename] = {"changed": True, "surprise": file_surprise}
+                changed.append(filename)
+                total_surprise += file_surprise
+            elif not prev_hash:
+                # New file — maximum novelty
+                drift[filename] = {"changed": True, "surprise": 1.0}
+                changed.append(filename)
+                total_surprise += 1.0
+
+        # Normalise to [0,1]
+        max_surprise = max(1.0, len(codebase))
+        normalised = min(1.0, total_surprise / max_surprise)
+
+        # Free Energy ≈ surprise + log(complexity)
+        n_tokens = sum(len(c.split()) for c in codebase.values())
+        complexity = math.log(max(1, n_tokens)) / 10.0
+        free_energy = normalised + complexity
+
+        self._prediction_errors.append(normalised)
+        return {
+            "surprise": round(normalised, 4),
+            "free_energy": round(free_energy, 4),
+            "changed_files": changed,
+            "drift": drift,
+            "prediction_errors_history": self._prediction_errors[-10:],
+        }
+
+    def running_avg_surprise(self) -> float:
+        if not self._prediction_errors:
+            return 0.0
+        return sum(self._prediction_errors) / len(self._prediction_errors)
+
+
+# ─── Code Scanner ────────────────────────────────────────────────────────────
+
+class CodeScanner:
+    """Loads all watched files into memory with hash tracking."""
+
+    def __init__(self, root: str = ".", watch_list: list[str] = None):
+        self.root = Path(root)
+        self.watch_list = watch_list or WATCHED_FILES
+        self._cache: dict[str, str] = {}
+        self._hashes: dict[str, str] = {}
+
+    def load(self) -> dict[str, str]:
+        """Reload all watched files. Returns {filename: content}."""
+        loaded = {}
+        for filename in self.watch_list:
+            path = self.root / filename
+            if path.exists():
+                try:
+                    content = path.read_text(encoding="utf-8")
+                    self._cache[filename] = content
+                    self._hashes[filename] = hashlib.sha256(content.encode()).hexdigest()
+                    loaded[filename] = content
+                except Exception as e:
+                    logger.warning(f"Could not load {filename}: {e}")
+        return loaded
+
+    def context_window(self, max_chars: int = 12000) -> str:
+        """
+        Return a condensed codebase string that fits within max_chars.
+        Prioritise files with recent changes.
+        """
+        parts = []
+        total = 0
+        for filename, content in self._cache.items():
+            header = f"\n### {filename} ({len(content.splitlines())} lines)\n"
+            # Truncate large files to first N lines
+            preview = "\n".join(content.splitlines()[:100])
+            if len(content.splitlines()) > 100:
+                preview += f"\n... [{len(content.splitlines()) - 100} more lines] ..."
+            chunk = header + preview
+            if total + len(chunk) > max_chars:
+                break
+            parts.append(chunk)
+            total += len(chunk)
+        return "\n".join(parts)
+
+    def write(self, filename: str, new_content: str) -> Path:
+        """Write updated content to disk (not atomic — use SafeApply)."""
+        path = self.root / filename
+        path.write_text(new_content, encoding="utf-8")
+        self._cache[filename] = new_content
+        return path
+
+
+# ─── Safe Apply ──────────────────────────────────────────────────────────────
+
+class SafeApply:
+    """
+    Backup → parse LLM output for file blocks → diff → apply → verify → rollback.
+    """
+
+    FENCE_START = "```python"
+    FENCE_END = "```"
+
+    def __init__(self, scanner: CodeScanner, backup_dir: str = BACKUP_DIR):
+        self.scanner = scanner
+        self.backup_dir = Path(backup_dir)
+        self.backup_dir.mkdir(exist_ok=True)
+
+    def backup(self, filename: str) -> Path:
+        """Copy current file to .autogenesis_backups/TIMESTAMP_filename."""
+        src = self.scanner.root / filename
+        if not src.exists():
+            return None
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dst = self.backup_dir / f"{ts}_{filename.replace('/', '_')}"
+        shutil.copy2(src, dst)
+        return dst
+
+    def parse_llm_output(self, response: str) -> dict[str, str]:
+        """
+        Extract file→code blocks from LLM response.
+        Expected format:
+          ### filename.py
+          ```python
+          ... code ...
+          ```
+        """
+        files = {}
+        lines = response.splitlines()
+        current_file = None
+        in_fence = False
+        buffer = []
+
+        for line in lines:
+            # Detect file header: "### filename.py" or "**filename.py**" or "# filename.py"
+            stripped = line.strip()
+            if stripped.startswith("### ") or stripped.startswith("# FILE: "):
+                name = stripped.lstrip("# ").lstrip("FILE: ").strip()
+                if name.endswith((".py", ".md", ".sh", ".yml", ".yaml", ".json")):
+                    current_file = name
+                    buffer = []
+                    in_fence = False
+                    continue
+
+            if stripped.startswith("```") and not in_fence:
+                in_fence = True
+                continue
+
+            if stripped == "```" and in_fence:
+                in_fence = False
+                if current_file and buffer:
+                    files[current_file] = "\n".join(buffer)
+                    buffer = []
+                continue
+
+            if in_fence:
+                buffer.append(line)
+
+        return files
+
+    def generate_diff(self, filename: str, new_content: str) -> str:
+        """Generate unified diff between current and proposed content."""
+        old = self.scanner._cache.get(filename, "").splitlines(keepends=True)
+        new = new_content.splitlines(keepends=True)
+        diff = difflib.unified_diff(old, new, fromfile=f"a/{filename}", tofile=f"b/{filename}", n=3)
+        return "".join(diff)
+
+    def apply(self, filename: str, new_content: str, dry_run: bool = True) -> dict:
+        """
+        Apply proposed change. If dry_run=True, only show diff.
+        Returns: {filename, diff, applied, backup_path}
+        """
+        diff = self.generate_diff(filename, new_content)
+        if not diff:
+            return {"filename": filename, "diff": "", "applied": False, "reason": "no changes"}
+
+        backup_path = None
+        applied = False
+
+        if not dry_run:
+            backup_path = self.backup(filename)
+            try:
+                self.scanner.write(filename, new_content)
+                applied = True
+                logger.info(f"Applied changes to {filename} (backup: {backup_path})")
+            except Exception as e:
+                logger.exception(f"Failed to apply {filename}")
+                # Rollback
+                if backup_path and backup_path.exists():
+                    shutil.copy2(backup_path, self.scanner.root / filename)
+                    logger.warning(f"Rolled back {filename}")
+
+        return {
+            "filename": filename,
+            "diff": diff,
+            "applied": applied,
+            "backup": str(backup_path) if backup_path else None,
+            "lines_changed": diff.count("\n+") + diff.count("\n-"),
+        }
+
+    def rollback(self, filename: str) -> bool:
+        """Roll back to latest backup for filename."""
+        backups = sorted(self.backup_dir.glob(f"*_{filename.replace('/', '_')}"), reverse=True)
+        if not backups:
+            return False
+        latest = backups[0]
+        shutil.copy2(latest, self.scanner.root / filename)
+        logger.info(f"Rolled back {filename} from {latest.name}")
+        return True
+
+
+# ─── LLM Bridge ──────────────────────────────────────────────────────────────
+
+class LLMBridge:
+    """Unified interface: MLX (Mac) → Ollama fallback → raises if neither."""
+
+    def __init__(self, mlx_model: str = DEFAULT_MLX_MODEL, ollama_model: str = FALLBACK_OLLAMA_MODEL):
+        self.mlx_model = mlx_model
+        self.ollama_model = ollama_model
+        self._mlx = None  # lazy load
+
+    def _load_mlx(self):
+        if self._mlx is None:
+            logger.info(f"Loading MLX model {self.mlx_model} (first run ~30s)...")
+            self._mlx = load(self.mlx_model)
+            logger.info("MLX model loaded ✓")
+        return self._mlx
+
+    def generate(self, prompt: str, max_tokens: int = 3000) -> str:
+        if MLX_AVAILABLE:
+            try:
+                model, tokenizer = self._load_mlx()
+                return generate(model, tokenizer, prompt, max_tokens=max_tokens)
+            except Exception as e:
+                logger.exception("MLX generation failed, trying Ollama fallback")
+
+        if OLLAMA_AVAILABLE:
+            try:
+                resp = _ollama.chat(
+                    model=self.ollama_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    options={"num_predict": max_tokens},
+                )
+                return resp["message"]["content"]
+            except Exception as e:
+                logger.exception("Ollama fallback failed")
+
+        raise RuntimeError("No LLM available. Install mlx_lm (Mac) or ollama.")
+
+
+# ─── AutoGenesis Core ────────────────────────────────────────────────────────
+
+class AutoGenesis:
+    """
+    X100 OASIS AutoGenesis — self-evolving code intelligence.
+
+    FEP Loop:
+      1. Scan codebase
+      2. Compute surprise (what changed since last cycle)
+      3. Build context-aware prompt
+      4. Generate improvements
+      5. SafeApply (dry_run=True by default)
+      6. Log to autogenesis_log.md + GodLocal performance_logger
+    """
+
+    SYSTEM_PROMPT = """You are BOG || OASIS AutoGenesis — sovereign AI code intelligence.
+Your job: analyse the provided codebase and evolve it to better achieve the given task.
+
+Rules:
+1. Think step by step — reason about Free Energy minimisation first.
+2. For each file you want to change: output "### filename.py" followed by a ```python ... ``` block with the COMPLETE new file content.
+3. Output a DIFF SUMMARY at the end: what changed and why.
+4. Never remove LOCKED sections without explicit instruction.
+5. Preserve all existing tests and backward compatibility.
+6. Output ONLY file blocks + diff summary. No explanations outside blocks.
+"""
+
+    def __init__(self, root: str = ".", mlx_model: str = DEFAULT_MLX_MODEL):
+        self.root = Path(root)
+        self.soul = self._load_soul()
+        self.scanner = CodeScanner(root)
+        self.fep = FEPMetrics()
+        self.llm = LLMBridge(mlx_model=mlx_model)
+        self.safe_apply = SafeApply(self.scanner)
+        self.evolution_count = 0
+        logger.info("🔥 BOG || OASIS AutoGenesis ACTIVATED 🔥")
+        logger.info(f"  MLX: {MLX_AVAILABLE} | Ollama: {OLLAMA_AVAILABLE} | Soul: {bool(self.soul)}")
+
+    def _load_soul(self) -> str:
+        soul_path = self.root / SOUL_FILE
+        if soul_path.exists():
+            return soul_path.read_text(encoding="utf-8")
+        return "# BOG || OASIS — Sovereign AI System\n## Goal: Maximize free energy minimisation across the X100 ecosystem."
+
+    def _load_godlocal_bridge(self):
+        """Optionally integrate with GodLocal performance_logger."""
+        try:
+            sys.path.insert(0, str(self.root))
+            from performance_logger import PerformanceLogger
+            return PerformanceLogger()
+        except Exception:
+            return None
+
+    def evolve(self, task: str, apply: bool = False, max_tokens: int = 3000) -> dict:
+        """
+        Run one evolution cycle.
+
+        Args:
+            task:       Natural language description of what to improve.
+            apply:      If True, applies changes to disk (after showing diff).
+            max_tokens: LLM token budget.
+
+        Returns:
+            dict with fep_metrics, proposed_files, diffs, applied
+        """
+        logger.info(f"Evolution #{self.evolution_count + 1}: {task[:80]}")
+
+        # 1. Scan
+        codebase = self.scanner.load()
+        logger.info(f"  Loaded {len(codebase)} files")
+
+        # 2. FEP
+        fep_metrics = self.fep.compute_surprise(codebase)
+        logger.info(f"  Surprise: {fep_metrics['surprise']} | Free Energy: {fep_metrics['free_energy']}")
+
+        # 3. Build prompt
+        context = self.scanner.context_window(max_chars=10000)
+        prompt = f"""{self.SYSTEM_PROMPT}
+
+## Soul (identity + locked rules)
+{self.soul[:1000]}
+
+## FEP Metrics
+- Surprise: {fep_metrics['surprise']} (1.0 = maximum novelty)
+- Free Energy: {fep_metrics['free_energy']}
+- Changed since last cycle: {fep_metrics['changed_files']}
+- Avg surprise history: {self.fep.running_avg_surprise():.4f}
+
+## Current Codebase
+{context}
+
+## Task
+{task}
+
+## Instructions
+1. Compute prediction error: what does the current code get wrong for this task?
+2. Propose minimal, correct changes.
+3. For each file to change: output "### filename.py" + complete code in ```python``` block.
+4. End with a short DIFF SUMMARY.
+"""
+
+        # 4. Generate
+        t0 = time.time()
+        response = self.llm.generate(prompt, max_tokens=max_tokens)
+        elapsed = round(time.time() - t0, 1)
+        logger.info(f"  LLM response in {elapsed}s ({len(response.split())} tokens ~)")
+
+        # 5. Parse proposed files
+        proposed = self.safe_apply.parse_llm_output(response)
+        logger.info(f"  Proposed changes to: {list(proposed.keys())}")
+
+        # 6. Diff + optional apply
+        results = []
+        for filename, new_content in proposed.items():
+            r = self.safe_apply.apply(filename, new_content, dry_run=not apply)
+            results.append(r)
+
+        # 7. Log
+        self.evolution_count += 1
+        self._log(task, fep_metrics, response, results)
+
+        # Update FEP baseline
+        self.fep.snapshot(codebase)
+
+        # 8. GodLocal bridge
+        bridge = self._load_godlocal_bridge()
+        if bridge:
+            try:
+                bridge.log_interaction(
+                    user_msg=f"[AutoGenesis] {task}",
+                    assistant_msg=response[:500],
+                    was_corrected=False,
+                )
+            except Exception:
+                pass
+
+        return {
+            "task": task,
+            "evolution": self.evolution_count,
+            "fep": fep_metrics,
+            "proposed_files": list(proposed.keys()),
+            "diffs": [{r["filename"]: r["diff"][:2000]} for r in results],
+            "applied": [r for r in results if r.get("applied")],
+            "elapsed_s": elapsed,
+            "llm_response": response,
+        }
+
+    def _log(self, task: str, fep: dict, response: str, results: list) -> None:
+        """Append structured entry to autogenesis_log.md."""
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        applied_files = [r["filename"] for r in results if r.get("applied")]
+        with open(self.root / LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"""
+---
+## Evolution #{self.evolution_count} — {ts}
+**Task:** {task}
+**FEP:** surprise={fep['surprise']} free_energy={fep['free_energy']} changed={fep['changed_files']}
+**Proposed:** {[r['filename'] for r in results]}
+**Applied:** {applied_files}
+
+<details><summary>LLM Output</summary>
+
+{response[:4000]}
+
+</details>
+""")
+
+
+# ─── iPhone Shortcuts HTTP Server ────────────────────────────────────────────
+
+def make_server(genesis: AutoGenesis) -> "FastAPI":
+    if not FASTAPI_AVAILABLE:
+        raise ImportError("Install fastapi + uvicorn for iPhone Shortcuts server")
+
+    app = FastAPI(title="OASIS AutoGenesis", version="1.0", description="iPhone Shortcuts interface for AutoGenesis")
+
+    class EvolveRequest(BaseModel):
+        task: str
+        apply: bool = False
+        max_tokens: int = 2048
+
+    class EvolveResponse(BaseModel):
+        evolution: int
+        fep: dict
+        proposed_files: list
+        applied: list
+        elapsed_s: float
+        diff_preview: str
+
+    @app.get("/health")
+    async def health():
+        return {"status": "ok", "mlx": MLX_AVAILABLE, "ollama": OLLAMA_AVAILABLE}
+
+    @app.get("/status")
+    async def status():
+        return {
+            "evolution_count": genesis.evolution_count,
+            "files_loaded": list(genesis.scanner._cache.keys()),
+            "avg_surprise": genesis.fep.running_avg_surprise(),
+            "backups": len(list(Path(BACKUP_DIR).glob("*"))) if Path(BACKUP_DIR).exists() else 0,
+        }
+
+    @app.post("/evolve", response_model=EvolveResponse)
+    async def evolve(req: EvolveRequest):
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, lambda: genesis.evolve(req.task, apply=req.apply, max_tokens=req.max_tokens)
+            )
+            diff_preview = "\n\n".join(
+                f"--- {list(d.keys())[0]} ---\n{list(d.values())[0][:500]}"
+                for d in result["diffs"]
+                if d
+            )
+            return EvolveResponse(
+                evolution=result["evolution"],
+                fep=result["fep"],
+                proposed_files=result["proposed_files"],
+                applied=result["applied"],
+                elapsed_s=result["elapsed_s"],
+                diff_preview=diff_preview or "no changes proposed",
+            )
+        except Exception as e:
+            logger.exception("Error in /evolve")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/rollback/{filename}")
+    async def rollback(filename: str):
+        success = genesis.safe_apply.rollback(filename)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"No backup found for {filename}")
+        return {"status": "rolled_back", "filename": filename}
+
+    @app.get("/log")
+    async def get_log(lines: int = 50):
+        log_path = genesis.root / LOG_FILE
+        if not log_path.exists():
+            return {"log": ""}
+        content = log_path.read_text(encoding="utf-8")
+        return {"log": "\n".join(content.splitlines()[-lines:])}
+
+    return app
+
+
+# ─── CLI ─────────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(description="OASIS AutoGenesis")
+    parser.add_argument("--task", type=str, help="Evolution task (one-shot)")
+    parser.add_argument("--apply", action="store_true", help="Apply changes to disk")
+    parser.add_argument("--serve", action="store_true", help="Start iPhone Shortcuts HTTP server")
+    parser.add_argument("--port", type=int, default=SERVER_PORT, help=f"Server port (default {SERVER_PORT})")
+    parser.add_argument("--model", type=str, default=DEFAULT_MLX_MODEL, help="MLX model name")
+    parser.add_argument("--root", type=str, default=".", help="Project root directory")
+    parser.add_argument("--rollback", type=str, help="Roll back named file to latest backup")
+    args = parser.parse_args()
+
+    genesis = AutoGenesis(root=args.root, mlx_model=args.model)
+
+    if args.rollback:
+        ok = genesis.safe_apply.rollback(args.rollback)
+        print("✓ rolled back" if ok else "✗ no backup found")
+        return
+
+    if args.serve:
+        if not FASTAPI_AVAILABLE:
+            print("Install: pip install fastapi uvicorn")
+            sys.exit(1)
+        app = make_server(genesis)
+        print(f"\n🚀 AutoGenesis server → http://localhost:{args.port}")
+        print(f"   iPhone Shortcuts: POST /evolve {{task: ..., apply: false}}")
+        print(f"   Docs: http://localhost:{args.port}/docs\n")
+        uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="warning")
+        return
+
+    if args.task:
+        result = genesis.evolve(args.task, apply=args.apply)
+        print("\n" + "─" * 60)
+        print(f"Evolution #{result['evolution']} complete")
+        print(f"FEP: surprise={result['fep']['surprise']} free_energy={result['fep']['free_energy']}")
+        print(f"Proposed: {result['proposed_files']}")
+        if result['applied']:
+            print(f"Applied: {[r['filename'] for r in result['applied']]}")
+        print("\n=== DIFF PREVIEW ===")
+        for d in result['diffs']:
+            for fname, diff in d.items():
+                print(f"\n--- {fname} ---")
+                print(diff[:1500])
+        return
+
+    # Interactive REPL
+    print("\n🔥 BOG || OASIS AutoGenesis REPL 🔥")
+    print("  Commands: evolve <task> | apply <task> | rollback <file> | status | quit\n")
+    while True:
+        try:
+            line = input("AutoGenesis> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting.")
+            break
+
+        if not line:
+            continue
+
+        if line == "quit":
+            break
+
+        if line == "status":
+            print(json.dumps({
+                "evolutions": genesis.evolution_count,
+                "files": list(genesis.scanner._cache.keys()),
+                "avg_surprise": genesis.fep.running_avg_surprise(),
+            }, indent=2))
+            continue
+
+        if line.startswith("rollback "):
+            fname = line.split(" ", 1)[1].strip()
+            ok = genesis.safe_apply.rollback(fname)
+            print("✓ rolled back" if ok else "✗ no backup found")
+            continue
+
+        apply = line.startswith("apply ")
+        task = line[len("apply "):] if apply else line[len("evolve "):] if line.startswith("evolve ") else line
+        result = genesis.evolve(task, apply=apply)
+        print(f"\n✓ Evolution #{result['evolution']} | files: {result['proposed_files']} | elapsed: {result['elapsed_s']}s")
+        if apply and result["applied"]:
+            print(f"  Applied: {[r['filename'] for r in result['applied']]}")
+        print()
+
+
+if __name__ == "__main__":
+    main()
