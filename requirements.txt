@@ -16,3 +16,9 @@ ollama>=0.1.0
 
 # Self-evolve
 schedule>=1.2.0
+
+# Connectors (500+ integrations — ConnectorsModule)
+composio-core>=0.7
+
+# MCP client (Paper Desktop + other MCP servers)
+mcp>=1.0.0
