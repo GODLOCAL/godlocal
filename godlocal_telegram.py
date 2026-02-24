@@ -37,6 +37,8 @@ from telegram.ext import (
     filters,
 )
 from telegram.constants import ParseMode, ChatAction
+from performance_logger import log_interaction
+
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -371,7 +373,18 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         reply = data.get("reply") or data.get("response") or str(data)
 
-        # Update local history buffer (last 20 turns)
+
+        # ── Log interaction for self-improve loop ────────────────────────
+        try:
+            log_interaction(
+                user_input=user_msg,
+                agent_response=reply,
+                session_id=str(update.effective_chat.id),
+            )
+        except Exception as log_err:
+            logger.warning(f"log_interaction failed: {log_err}")
+
+                # Update local history buffer (last 20 turns)
         history = ctx.user_data.get("history", [])
         history.append({"role": "user",      "content": user_msg})
         history.append({"role": "assistant",  "content": reply})
