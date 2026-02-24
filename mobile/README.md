@@ -98,3 +98,23 @@ LFM2 24B is a Mixture-of-Experts model — only 2B parameters active per token, 
 - Nexa model hub: https://nexa.ai/models
 - LFM2 24B (Liquid AI): https://liquid.ai/lfm2
 - NexaAI GitHub: https://github.com/NexaAI/nexa-sdk
+
+---
+
+## Audio — On-Device TTS + STT (Optional)
+
+`AudioBridgeMLX.swift` integrates [MLX-Audio-Swift](https://github.com/Prince_Canuma/MLX-Audio-Swift) for native voice on Apple Silicon:
+
+| Capability | Models |
+|-----------|--------|
+| **TTS** (text → speech) | Qwen3-TTS, Marvis, Soprano, Pocket — with streaming |
+| **STT** (speech → text) | LFM-2.5-Audio, Voxtral Realtime, Parakeet, Qwen3 ASR |
+
+**Install (Xcode only — no script needed):**
+
+1. In Xcode: **File → Add Package Dependencies...**
+2. Paste URL: `https://github.com/Prince_Canuma/MLX-Audio-Swift`
+3. Select version `0.1.0` → **Add Package**
+4. Done. `AudioBridgeMLX.swift` auto-activates (stub `#else` branch disabled).
+
+> Without this package the file compiles fine in stub mode — LLM chat still works normally.
