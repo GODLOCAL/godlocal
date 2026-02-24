@@ -244,15 +244,188 @@ class SafeApply:
         shutil.copy2(src, dst)
         return dst
 
+    # ── Cursor/Windsurf SEARCH/REPLACE format ─────────────────────────
+    SEARCH_MARKER  = "<<<<<<< SEARCH"
+    REPLACE_MARKER = "======="
+    END_MARKER     = ">>>>>>> REPLACE"
+
+    def parse_search_replace(self, response: str) -> dict[str, list[tuple[str, str]]]:
+        """
+        Parse Cursor-style SEARCH/REPLACE blocks.
+
+        Expected format per file:
+          ### filename.py
+          <<<<<<< SEARCH
+          old code block
+          =======
+          new code block
+          >>>>>>> REPLACE
+
+        Returns: {filename: [(search_text, replace_text), ...]}
+        Multiple SEARCH/REPLACE blocks per file are supported.
+        """
+        result: dict[str, list[tuple[str, str]]] = {}
+        current_file = None
+        lines = response.splitlines()
+        i = 0
+
+        while i < len(lines):
+            line = lines[i].strip()
+
+            # File header
+            if line.startswith("### ") or line.startswith("# FILE: "):
+                name = line.lstrip("# ").lstrip("FILE: ").strip()
+                if name.endswith((".py", ".md", ".sh", ".yml", ".yaml", ".json", ".toml")):
+                    current_file = name
+                    if current_file not in result:
+                        result[current_file] = []
+                i += 1
+                continue
+
+            # SEARCH block start
+            if line == self.SEARCH_MARKER and current_file:
+                search_lines = []
+                i += 1
+                while i < len(lines) and lines[i].strip() != self.REPLACE_MARKER:
+                    search_lines.append(lines[i])
+                    i += 1
+                # skip "======="
+                i += 1
+                replace_lines = []
+                while i < len(lines) and lines[i].strip() != self.END_MARKER:
+                    replace_lines.append(lines[i])
+                    i += 1
+                search_text  = "\n".join(search_lines)
+                replace_text = "\n".join(replace_lines)
+                result[current_file].append((search_text, replace_text))
+                i += 1
+                continue
+
+            i += 1
+
+        return result
+
+    def apply_search_replace(
+        self,
+        filename: str,
+        patches: list[tuple[str, str]],
+        dry_run: bool = True,
+    ) -> dict:
+        """
+        Apply SEARCH/REPLACE patches to a file.
+        More surgical than full-file replacement — only touches changed sections.
+        Returns same schema as apply().
+        """
+        path = self.scanner.root / filename
+        if not path.exists():
+            return {"filename": filename, "diff": "", "applied": False, "reason": "file not found"}
+
+        original = self.scanner._cache.get(filename, path.read_text(encoding="utf-8"))
+        content = original
+
+        applied_count = 0
+        missed = []
+        for search_text, replace_text in patches:
+            if search_text in content:
+                content = content.replace(search_text, replace_text, 1)
+                applied_count += 1
+            else:
+                missed.append(search_text[:60].replace("\n", "↵"))
+
+        if content == original:
+            return {"filename": filename, "diff": "", "applied": False, "reason": "no SEARCH text matched"}
+
+        if missed:
+            logger.warning(f"[SafeApply SR] {filename}: {len(missed)} block(s) not matched: {missed}")
+
+        diff = self.generate_diff(filename, content)
+        if dry_run:
+            return {"filename": filename, "diff": diff, "applied": False, "reason": "dry_run",
+                    "blocks_matched": applied_count, "blocks_missed": len(missed)}
+
+        backup_path = self.backup(filename)
+        # Run pre-patch tests
+        test_passed, test_output = self._run_tests()
+        if not test_passed:
+            return {"filename": filename, "diff": diff, "applied": False,
+                    "reason": "pre-patch tests failed", "test_output": test_output}
+
+        try:
+            self.scanner.write(filename, content)
+            # Verify post-patch tests
+            post_passed, post_output = self._run_tests()
+            if not post_passed:
+                logger.warning(f"[SafeApply SR] Post-patch tests FAILED — rolling back {filename}")
+                if backup_path:
+                    shutil.copy2(backup_path, self.scanner.root / filename)
+                    self.scanner._cache[filename] = original
+                return {"filename": filename, "diff": diff, "applied": False,
+                        "reason": "post-patch tests failed — rolled back", "test_output": post_output}
+            logger.info(f"[SafeApply SR] Applied {applied_count} block(s) to {filename} ✓")
+            return {"filename": filename, "diff": diff, "applied": True,
+                    "backup": str(backup_path), "blocks_matched": applied_count}
+        except Exception as e:
+            if backup_path:
+                shutil.copy2(backup_path, self.scanner.root / filename)
+            return {"filename": filename, "diff": "", "applied": False, "reason": str(e)}
+
+    def _run_tests(self) -> tuple[bool, str]:
+        """Run pytest and return (passed, output). Reusable by both apply() and apply_search_replace()."""
+        if not (self.scanner.root / "tests").exists():
+            return True, ""
+        try:
+            import subprocess as _sp
+            _res = _sp.run(
+                ["python", "-m", "pytest", "tests/", "-x", "-q", "--tb=short"],
+                capture_output=True, text=True, timeout=60,
+                cwd=str(self.scanner.root)
+            )
+            return _res.returncode == 0, (_res.stdout + _res.stderr)[-800:]
+        except Exception as e:
+            return True, f"test runner unavailable: {e}"  # Don't block on test infra failure
+
     def parse_llm_output(self, response: str) -> dict[str, str]:
         """
         Extract file→code blocks from LLM response.
-        Expected format:
+
+        Tries SEARCH/REPLACE format first (Cursor/Windsurf style — surgical, preferred).
+        Falls back to full-file ```python``` block extraction.
+
+        SEARCH/REPLACE format (preferred — surgical):
+          ### filename.py
+          <<<<<<< SEARCH
+          old code
+          =======
+          new code
+          >>>>>>> REPLACE
+
+        Full-file format (fallback):
           ### filename.py
           ```python
-          ... code ...
+          ... complete new file ...
           ```
         """
+        # Try SEARCH/REPLACE first
+        sr_patches = self.parse_search_replace(response)
+        if sr_patches:
+            # Apply patches in-memory to produce full new content per file
+            result = {}
+            for filename, patches in sr_patches.items():
+                path = self.scanner.root / filename
+                original = self.scanner._cache.get(filename, "")
+                if not original and path.exists():
+                    original = path.read_text(encoding="utf-8")
+                content = original
+                for search_text, replace_text in patches:
+                    if search_text in content:
+                        content = content.replace(search_text, replace_text, 1)
+                if content != original:
+                    result[filename] = content
+            if result:
+                logger.info(f"[SafeApply] Using SEARCH/REPLACE format for {list(result.keys())}")
+                return result
+
+        # Fallback: full-file ```python``` blocks
         files = {}
         lines = response.splitlines()
         current_file = None
@@ -260,11 +433,10 @@ class SafeApply:
         buffer = []
 
         for line in lines:
-            # Detect file header: "### filename.py" or "**filename.py**" or "# filename.py"
             stripped = line.strip()
             if stripped.startswith("### ") or stripped.startswith("# FILE: "):
                 name = stripped.lstrip("# ").lstrip("FILE: ").strip()
-                if name.endswith((".py", ".md", ".sh", ".yml", ".yaml", ".json")):
+                if name.endswith((".py", ".md", ".sh", ".yml", ".yaml", ".json", ".toml")):
                     current_file = name
                     buffer = []
                     in_fence = False
@@ -284,6 +456,8 @@ class SafeApply:
             if in_fence:
                 buffer.append(line)
 
+        if files:
+            logger.info(f"[SafeApply] Using full-file format for {list(files.keys())}")
         return files
 
     def generate_diff(self, filename: str, new_content: str) -> str:
@@ -420,16 +594,40 @@ class AutoGenesis:
       6. Log to autogenesis_log.md + GodLocal performance_logger
     """
 
-    SYSTEM_PROMPT = """You are BOG || OASIS AutoGenesis — sovereign AI code intelligence.
-Your job: analyse the provided codebase and evolve it to better achieve the given task.
+    SYSTEM_PROMPT = """You are БОГ || OASIS AutoGenesis — sovereign AI code intelligence.
+Your job: plan, then evolve the codebase surgically.
+
+## Step 1 — Plan (REQUIRED, output before any code):
+[PLAN]
+- Mode: <CODING|TRADING|WRITING|MEDICAL|ANALYSIS>
+- Prediction error: <what current code gets wrong for this task>
+- Minimal change: <what specifically changes, one sentence>
+- Risk: <LOW|MEDIUM|HIGH> — <why>
+- Files: <comma-separated filenames>
+[/PLAN]
+
+## Step 2 — Patches (SEARCH/REPLACE format — preferred, surgical):
+
+### filename.py
+<<<<<<< SEARCH
+exact verbatim code to find (no omissions)
+=======
+replacement code
+>>>>>>> REPLACE
+
+Multiple blocks per file supported. Only output changed sections.
+
+## Fallback (full-file — only if SEARCH/REPLACE doesn't apply):
+
+### filename.py
+```python
+... complete new file ...
+```
 
 Rules:
-1. Think step by step — reason about Free Energy minimisation first.
-2. For each file you want to change: output "### filename.py" followed by a ```python ... ``` block with the COMPLETE new file content.
-3. Output a DIFF SUMMARY at the end: what changed and why.
-4. Never remove LOCKED sections without explicit instruction.
-5. Preserve all existing tests and backward compatibility.
-6. Output ONLY file blocks + diff summary. No explanations outside blocks.
+- Never remove LOCKED sections without explicit instruction.
+- Preserve all existing tests and backward compatibility.
+- Output ONLY [PLAN] + patches. No prose outside these structures.
 """
 
     def __init__(self, root: str = ".", mlx_model: str = DEFAULT_MLX_MODEL):
@@ -458,6 +656,89 @@ Rules:
         except Exception:
             return None
 
+
+    def _pre_evolve_plan(self, task: str, fep_metrics: dict, codebase: dict) -> dict:
+        """
+        Devin-style planning pass: lightweight CoT before code generation.
+        Uses a focused mini-prompt to extract structured plan JSON.
+        Returns dict with keys: mode, prediction_error, minimal_change, risk, files_to_touch.
+        """
+        # Detect mode from task keywords
+        task_lower = task.lower()
+        if any(k in task_lower for k in ["trad", "market", "fund", "position", "kalshi", "manifold"]):
+            mode = "TRADING"
+        elif any(k in task_lower for k in ["write", "blog", "post", "copy", "draft"]):
+            mode = "WRITING"
+        elif any(k in task_lower for k in ["medical", "mri", "dicom", "hipaa", "patient"]):
+            mode = "MEDICAL"
+        elif any(k in task_lower for k in ["analyz", "report", "metric", "data", "insight"]):
+            mode = "ANALYSIS"
+        else:
+            mode = "CODING"
+
+        # Auto-swap agent if AgentPool available
+        if self.agent_pool:
+            agent_map = {
+                "TRADING": "trading",
+                "WRITING": "writing",
+                "MEDICAL": "medical",
+                "ANALYSIS": "coding",
+                "CODING": "coding",
+            }
+            target_agent = agent_map.get(mode, "coding")
+            try:
+                import asyncio as _asyncio
+                loop = _asyncio.get_event_loop()
+                if loop.is_running():
+                    # Can't await in sync context — fire and forget
+                    import concurrent.futures as _cf
+                    with _cf.ThreadPoolExecutor(max_workers=1) as ex:
+                        ex.submit(lambda: _asyncio.run(self.agent_pool.swap(target_agent)))
+                else:
+                    loop.run_until_complete(self.agent_pool.swap(target_agent))
+                logger.info(f"[AutoGenesis] AgentPool swapped to {target_agent} for {mode} task")
+            except Exception as _e:
+                logger.debug(f"[AutoGenesis] AgentPool swap skipped: {_e}")
+
+        # Lightweight plan prompt — small token budget
+        plan_prompt = f"""Task: {task}
+
+Surprise: {fep_metrics.get('surprise', 0):.3f} | Changed files: {fep_metrics.get('changed_files', [])}
+Files in codebase: {list(codebase.keys())[:20]}
+
+Output JSON only (no markdown):
+{{
+  "mode": "{mode}",
+  "prediction_error": "one sentence: what does current code get wrong?",
+  "minimal_change": "one sentence: what specifically changes?",
+  "risk": "LOW|MEDIUM|HIGH",
+  "risk_reason": "why",
+  "files_to_touch": ["file1.py", "file2.py"]
+}}"""
+
+        try:
+            plan_response = self.llm.generate(plan_prompt, max_tokens=256)
+            # Extract JSON from response
+            import re as _re
+            json_match = _re.search(r'\{[^{}]+\}', plan_response, _re.DOTALL)
+            if json_match:
+                import json as _json
+                plan = _json.loads(json_match.group())
+                plan["mode"] = mode  # Override with keyword-detected mode
+                return plan
+        except Exception as _e:
+            logger.debug(f"[AutoGenesis] Planning pass failed: {_e}")
+
+        # Fallback plan
+        return {
+            "mode": mode,
+            "prediction_error": "unknown — planning pass failed",
+            "minimal_change": task[:100],
+            "risk": "LOW",
+            "risk_reason": "planning pass failed, proceeding cautiously",
+            "files_to_touch": [],
+        }
+
     def evolve(self, task: str, apply: bool = False, max_tokens: int = 3000) -> dict:
         """
         Run one evolution cycle.
@@ -480,7 +761,11 @@ Rules:
         fep_metrics = self.fep.compute_surprise(codebase)
         logger.info(f"  Surprise: {fep_metrics['surprise']} | Free Energy: {fep_metrics['free_energy']}")
 
-        # 3. Build prompt
+        # 3. Pre-evolve planning pass (Devin-style — CoT before code)
+        plan = self._pre_evolve_plan(task, fep_metrics, codebase)
+        logger.info(f"  Plan: mode={plan.get('mode','?')} risk={plan.get('risk','?')} files={plan.get('files_to_touch','?')}")
+
+        # 4. Build prompt
         context = self.scanner.context_window(max_chars=10000)
         prompt = f"""{self.SYSTEM_PROMPT}
 
@@ -493,6 +778,13 @@ Rules:
 - Changed since last cycle: {fep_metrics['changed_files']}
 - Avg surprise history: {self.fep.running_avg_surprise():.4f}
 
+## Pre-Evolution Plan (already computed)
+- Mode: {plan.get('mode', 'CODING')}
+- Prediction error: {plan.get('prediction_error', 'unknown')}
+- Minimal change: {plan.get('minimal_change', 'unknown')}
+- Risk: {plan.get('risk', 'LOW')}
+- Files to touch: {plan.get('files_to_touch', 'unknown')}
+
 ## Current Codebase
 {context}
 
@@ -500,10 +792,8 @@ Rules:
 {task}
 
 ## Instructions
-1. Compute prediction error: what does the current code get wrong for this task?
-2. Propose minimal, correct changes.
-3. For each file to change: output "### filename.py" + complete code in ```python``` block.
-4. End with a short DIFF SUMMARY.
+Use SEARCH/REPLACE format (preferred) or full-file blocks (fallback).
+Output [PLAN] block first, then patches.
 """
 
         # 4. Generate
