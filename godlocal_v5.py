@@ -285,6 +285,46 @@ class SleepCycle:
                 logger.warning(f"[SelfEvolve] skipped: {e}")
                 report["self_evolve"] = {"error": str(e)}
 
+
+        # Phase 3 — Performance Pattern Analysis (ao-52 analog)
+        # Analyzes interaction log, extracts learned patterns, updates god_soul.md
+        try:
+            from performance_logger import analyze_patterns, update_soul_with_patterns
+            patterns = analyze_patterns(self.llm, hours_back=24)
+            if patterns.get("status") == "ok":
+                soul_updated = update_soul_with_patterns(patterns)
+                report["performance"] = {
+                    "interactions_analyzed": patterns.get("interactions_analyzed", 0),
+                    "correction_rate": patterns.get("correction_rate", 0),
+                    "soul_updated": soul_updated,
+                    "gaps": patterns.get("gaps", []),
+                }
+                logger.info(f"📊 Performance: {patterns.get('correction_rate', 0):.1%} correction rate, soul_updated={soul_updated}")
+            else:
+                report["performance"] = {"status": patterns.get("status")}
+        except Exception as e:
+            logger.warning(f"[PerfLogger] skipped: {e}")
+            report["performance"] = {"error": str(e)}
+
+        # Append lessons to tasks/lessons.md
+        try:
+            from pathlib import Path as _Path
+            lessons_path = _Path("tasks/lessons.md")
+            if lessons_path.exists() and report.get("self_evolve"):
+                se = report["self_evolve"]
+                if isinstance(se, dict) and se.get("gaps_resolved", 0) > 0:
+                    entry = (
+                        f"\n## [{report['date']}] — sleep_cycle() run\n"
+                        f"- Self-evolve: {se.get('gaps_resolved')}/{se.get('gaps_found')} gaps resolved\n"
+                        f"- Topics: {se.get('topics', [])}\n"
+                    )
+                    if report.get("performance", {}).get("correction_rate"):
+                        entry += f"- Correction rate: {report['performance']['correction_rate']:.1%}\n"
+                    with lessons_path.open("a", encoding="utf-8") as f_lessons:
+                        f_lessons.write(entry)
+        except Exception:
+            pass
+
         return report
 
 
