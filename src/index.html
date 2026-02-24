@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GodLocal v5.1 — Your AI. Your Machine. Forever.</title>
+<meta name="description" content="The first local AI that self-evolves. Runs on your hardware. 9 capabilities shipped. Gets smarter every night.">
+<meta property="og:title" content="GodLocal v5.1 — Your AI. Your Machine. Forever.">
+<meta property="og:description" content="No subscription. No cloud. Self-evolving AI on your machine — 9 capabilities, nightly sleep cycle, sovereign soul.">
+<meta property="og:image" content="https://raw.githubusercontent.com/GODLOCAL/godlocal/main/assets/logo-banner.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@kitbtc">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #00FF41;
+    --cyan: #00E5FF;
+    --purple: #7B2FFF;
+    --bg: #000;
+    --surface: #080808;
+    --surface2: #0d0d0d;
+    --border: rgba(0,255,65,0.12);
+    --text: #e8e8e8;
+    --muted: #666;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── NAV ─────────────────────────────────────────────── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 40px;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-logo { color: var(--green); font-size: 1.1rem; font-weight: 700; text-decoration: none; }
+  .nav-badge {
+    background: rgba(0,255,65,0.1); border: 1px solid rgba(0,255,65,0.3);
+    color: var(--green); font-size: 0.65rem; padding: 2px 8px;
+    border-radius: 20px; margin-left: 10px;
+  }
+  .nav-links { display: flex; gap: 24px; }
+  .nav-links a {
+    color: var(--muted); text-decoration: none; font-size: 0.8rem;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--green); }
+  .nav-cta {
+    background: var(--green); color: #000; padding: 8px 18px;
+    border-radius: 4px; font-size: 0.8rem; font-weight: 700;
+    text-decoration: none; transition: opacity 0.2s;
+  }
+  .nav-cta:hover { opacity: 0.85; }
+
+  /* ── SECTIONS ────────────────────────────────────────── */
+  section { max-width: 900px; margin: 0 auto; padding: 80px 24px; }
+
+  /* ── HERO ────────────────────────────────────────────── */
+  .hero {
+    min-height: 100vh; display: flex; flex-direction: column;
+    justify-content: center; padding-top: 100px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .hero-meta {
+    font-size: 0.72rem; color: var(--muted); letter-spacing: 0.15em;
+    margin-bottom: 20px; text-transform: uppercase;
+  }
+  .hero-meta span { color: var(--green); }
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-weight: 700; line-height: 1.15;
+    color: #fff; margin-bottom: 24px;
+  }
+  h1 em { color: var(--green); font-style: normal; }
+  .hero-sub {
+    font-size: 1.05rem; color: #aaa; max-width: 600px;
+    margin-bottom: 40px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  .hero-terminal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px 24px; margin-bottom: 36px;
+    max-width: 640px; position: relative;
+  }
+  .terminal-bar {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+  .terminal-bar span {
+    width: 12px; height: 12px; border-radius: 50%;
+  }
+  .t-red { background: #ff5f57; }
+  .t-yellow { background: #febc2e; }
+  .t-green { background: #28c840; }
+  .terminal-line { font-size: 0.82rem; color: #888; margin-bottom: 4px; }
+  .terminal-line .prompt { color: var(--green); }
+  .terminal-line .cmd { color: #fff; }
+  .terminal-line .out { color: #aaa; }
+  .terminal-line .highlight { color: var(--cyan); }
+  .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn-primary {
+    background: var(--green); color: #000;
+    padding: 12px 28px; border-radius: 4px;
+    font-weight: 700; font-size: 0.9rem;
+    text-decoration: none; display: inline-flex;
+    align-items: center; gap: 8px; transition: opacity 0.2s;
+  }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-secondary {
+    border: 1px solid var(--border); color: var(--text);
+    padding: 12px 28px; border-radius: 4px;
+    font-size: 0.9rem; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: border-color 0.2s;
+  }
+  .btn-secondary:hover { border-color: var(--green); color: var(--green); }
+  .hero-stats {
+    display: flex; gap: 40px; margin-top: 48px;
+    padding-top: 40px; border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .stat-item { }
+  .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--green); }
+  .stat-label { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+
+  /* ── SECTION HEADERS ─────────────────────────────────── */
+  .section-tag {
+    font-size: 0.7rem; letter-spacing: 0.18em; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 12px;
+  }
+  h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; color: #fff; margin-bottom: 16px; }
+  h2 em { color: var(--green); font-style: normal; }
+  .section-sub {
+    font-size: 1rem; color: #888; max-width: 560px; margin-bottom: 48px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  /* ── V5.1 SHIPPED ────────────────────────────────────── */
+  .shipped-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px; margin-bottom: 48px;
+  }
+  .shipped-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .shipped-card:hover { border-color: rgba(0,255,65,0.35); transform: translateY(-2px); }
+  .shipped-card.new { border-color: rgba(0,255,65,0.28); }
+  .card-tag {
+    font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 3px; display: inline-block; margin-bottom: 12px;
+  }
+  .tag-main { background: rgba(0,255,65,0.1); color: var(--green); }
+  .tag-branch { background: rgba(0,229,255,0.1); color: var(--cyan); border: 1px solid rgba(0,229,255,0.25); }
+  .tag-new { background: rgba(123,47,255,0.15); color: #a87fff; border: 1px solid rgba(123,47,255,0.3); }
+  .shipped-card h3 { font-size: 0.9rem; color: #fff; margin-bottom: 8px; }
+  .shipped-card p { font-size: 0.78rem; color: #777; line-height: 1.55; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .shipped-card .card-file {
+    font-size: 0.68rem; color: var(--muted); margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid var(--border);
+  }
+
+  /* ── SKILLS ──────────────────────────────────────────── */
+  .skills-wrap { display: flex; flex-direction: column; gap: 24px; }
+  .skill-row {
+    display: grid; grid-template-columns: 200px 1fr;
+    gap: 24px; align-items: start;
+    padding: 24px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px;
+    transition: border-color 0.2s;
+  }
+  .skill-row:hover { border-color: rgba(0,255,65,0.3); }
+  .skill-label { }
+  .skill-name { font-size: 0.85rem; font-weight: 700; color: var(--green); margin-bottom: 4px; }
+  .skill-file { font-size: 0.68rem; color: var(--muted); }
+  .skill-desc { font-size: 0.82rem; color: #aaa; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .skill-bullets { margin-top: 10px; padding-left: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+  .skill-bullets li {
+    font-size: 0.7rem; color: #888; background: rgba(255,255,255,0.04);
+    padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.07);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  /* ── ARCHITECTURE ────────────────────────────────────── */
+  .arch-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 28px 32px;
+    font-size: 0.78rem; line-height: 2;
+    overflow-x: auto;
+  }
+  .arch-box .layer-title { color: var(--green); font-weight: 700; }
+  .arch-box .layer-item { color: #999; }
+  .arch-box .layer-note { color: var(--cyan); }
+  .arch-box .layer-new { color: #a87fff; }
+
+  /* ── SLEEP ───────────────────────────────────────────── */
+  .sleep-phases {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px; margin-bottom: 40px;
+  }
+  .phase {
+    padding: 18px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  .phase-num { font-size: 1.4rem; font-weight: 700; color: var(--green); }
+  .phase-name { font-size: 0.78rem; color: #aaa; margin-top: 4px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .phase-sub { font-size: 0.68rem; color: var(--muted); margin-top: 6px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+
+  /* ── PRICING ─────────────────────────────────────────── */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .price-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 24px;
+    display: flex; flex-direction: column;
+  }
+  .price-card.featured {
+    border-color: var(--green);
+    background: rgba(0,255,65,0.03);
+  }
+  .price-tier { font-size: 0.68rem; letter-spacing: 0.15em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+  .price-name { font-size: 1rem; font-weight: 700; color: #fff; }
+  .price-amount { font-size: 1.6rem; font-weight: 700; color: var(--green); margin: 8px 0 16px; }
+  .price-desc { font-size: 0.72rem; color: var(--muted); margin-bottom: 16px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .price-features { list-style: none; margin-bottom: 20px; flex: 1; }
+  .price-features li {
+    font-size: 0.75rem; color: #999; padding: 4px 0;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  .price-features li::before { content: '✓ '; color: var(--green); }
+  .price-link {
+    display: block; text-align: center; padding: 10px;
+    border: 1px solid var(--border); border-radius: 4px;
+    font-size: 0.8rem; color: var(--green); text-decoration: none;
+    transition: background 0.2s;
+    margin-top: auto;
+  }
+  .price-link:hover { background: rgba(0,255,65,0.08); }
+  .price-card.featured .price-link {
+    background: var(--green); color: #000; font-weight: 700; border-color: var(--green);
+  }
+  .price-card.featured .price-link:hover { opacity: 0.85; }
+
+  /* ── COMPARISON ──────────────────────────────────────── */
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .compare-col { padding: 24px; border-radius: 8px; }
+  .compare-col.bad { background: rgba(255,0,0,0.03); border: 1px solid rgba(255,50,50,0.12); }
+  .compare-col.good { background: rgba(0,255,65,0.03); border: 1px solid rgba(0,255,65,0.2); }
+  .compare-title { font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 16px; }
+  .compare-col.bad .compare-title { color: #ff5555; }
+  .compare-col.good .compare-title { color: var(--green); }
+  .compare-item { font-size: 0.8rem; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .compare-item:last-child { border-bottom: none; }
+  .compare-col.bad .compare-item { color: #888; }
+  .compare-col.bad .compare-item::before { content: '✗ '; color: #ff5555; }
+  .compare-col.good .compare-item { color: #ccc; }
+  .compare-col.good .compare-item::before { content: '✓ '; color: var(--green); }
+
+  /* ── FOOTER ──────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 40px;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 20px;
+    max-width: 900px; margin: 0 auto;
+  }
+  .footer-left { font-size: 0.75rem; color: var(--muted); }
+  .footer-left a { color: var(--green); text-decoration: none; }
+  .footer-links { display: flex; gap: 20px; }
+  .footer-links a { font-size: 0.75rem; color: var(--muted); text-decoration: none; }
+  .footer-links a:hover { color: var(--green); }
+
+  /* ── MATRIX RAIN BG ──────────────────────────────────── */
+  #matrix-canvas {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none; z-index: 0; opacity: 0.025;
+  }
+  main { position: relative; z-index: 1; }
+
+  @media (max-width: 640px) {
+    nav { padding: 12px 20px; }
+    .nav-links { display: none; }
+    section { padding: 60px 20px; }
+    .skill-row { grid-template-columns: 1fr; }
+    .compare-grid { grid-template-columns: 1fr; }
+    .hero-stats { gap: 24px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="matrix-canvas"></canvas>
+
+<nav>
+  <div style="display:flex;align-items:center;gap:8px">
+    <a href="#" class="nav-logo">GODLOCAL_</a>
+    <span class="nav-badge">v5.1</span>
+  </div>
+  <div class="nav-links">
+    <a href="#shipped">What's New</a>
+    <a href="#skills">Skills</a>
+    <a href="#sleep">Sleep Cycle</a>
+    <a href="#pricing">Pricing</a>
+    <a href="https://github.com/GODLOCAL/godlocal" target="_blank">GitHub</a>
+  </div>
+  <a class="nav-cta" href="https://github.com/GODLOCAL/godlocal">Install Free →</a>
+</nav>
+
+<main>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<section class="hero">
+  <div class="hero-meta">
+    Open Source · AGPL-3.0 · Local First · <span>v5.1 — 9 capabilities shipped</span>
+  </div>
+  <h1>Your AI.<br>Your Machine.<br><em>Getting smarter while you sleep.</em></h1>
+  <p class="hero-sub">
+    No subscription. No API key. No cloud.<br>
+    The first AI that self-evolves — overnight, on your hardware, while you rest.
+  </p>
+
+  <div class="hero-terminal">
+    <div class="terminal-bar">
+      <span class="t-red"></span>
+      <span class="t-yellow"></span>
+      <span class="t-green"></span>
+    </div>
+    <div class="terminal-line"><span class="prompt">$ </span><span class="cmd">git clone https://github.com/GODLOCAL/godlocal && python godlocal_v5.py</span></div>
+    <div class="terminal-line"><span class="out">Loading z-lab/Qwen3-4B-PARO... [██████████] done</span></div>
+    <div class="terminal-line"><span class="out">Memory: 1,247 entries · Soul: warrior.md · AutoGenesis: ✓</span></div>
+    <div class="terminal-line"><span class="out">AgentPool: 6 agents ready · X-ZERO: 4 connectors active</span></div>
+    <div class="terminal-line" style="margin-top:8px"><span class="prompt">god › </span><span class="cmd">how is the portfolio?</span></div>
+    <div class="terminal-line"><span class="out">I ran the numbers at 01:00 while you slept.</span></div>
+    <div class="terminal-line"><span class="highlight">SOL +12.4%. BTC flat. Cut 3 positions. 847 memories consolidated.</span></div>
+    <div class="terminal-line"><span class="out">I remember you said never hold through Monday open.</span></div>
+    <div class="terminal-line" style="margin-top:8px"><span class="prompt">god › </span><span class="cmd" style="color:#444">_</span></div>
+  </div>
+
+  <div class="hero-ctas">
+    <a href="https://github.com/GODLOCAL/godlocal" class="btn-primary" target="_blank">
+      ↳ Install Free
+    </a>
+    <a href="#shipped" class="btn-secondary">What's new in v5.1</a>
+    <a href="#pricing" class="btn-secondary">View Pricing</a>
+  </div>
+
+  <div class="hero-stats">
+    <div class="stat-item">
+      <div class="stat-value">9</div>
+      <div class="stat-label">Capabilities Shipped</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">6</div>
+      <div class="stat-label">Hot-Swap Agents</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">4</div>
+      <div class="stat-label">Market Connectors</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">$0</div>
+      <div class="stat-label">Forever Free Core</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">0</div>
+      <div class="stat-label">Bytes Exit Your Machine</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SHIPPED ═══════════════ -->
+<section id="shipped">
+  <div class="section-tag">// v5.1 changelog</div>
+  <h2>9 capabilities.<br><em>All shipped. All running on your machine.</em></h2>
+  <p class="section-sub">Every feature below is live in the GitHub repo — not a roadmap, not a waitlist.</p>
+
+  <div class="shipped-grid">
+
+    <div class="shipped-card">
+      <span class="card-tag tag-main">On Main</span>
+      <h3>pytest Gate in SafeApply</h3>
+      <p>Every AutoGenesis code patch runs your test suite before touching a real file. No regression, ever.</p>
+      <div class="card-file">oasis_autogenesis.py · SafeApply.apply()</div>
+    </div>
+
+    <div class="shipped-card">
+      <span class="card-tag tag-main">On Main</span>
+      <h3>Live Dashboard · GET /dashboard</h3>
+      <p>Dark HTML dashboard with real-time FEP surprise metrics, correction rate, and last 100 log lines.</p>
+      <div class="card-file">godlocal_v5.py · /dashboard endpoint</div>
+    </div>
+
+    <div class="shipped-card">
+      <span class="card-tag tag-main">On Main</span>
+      <h3>CHANGELOG Auto-Docs</h3>
+      <p>Every successful AutoGenesis apply writes a dated entry to CHANGELOG.md automatically. Full audit trail.</p>
+      <div class="card-file">oasis_autogenesis.py · post-apply hook</div>
+    </div>
+
+    <div class="shipped-card">
+      <span class="card-tag tag-main">On Main</span>
+      <h3>Latency + Token Metrics</h3>
+      <p>performance_logger.py now tracks latency_ms and tokens_used per interaction. DeepMind-style LOCKED/snapshot/rollback.</p>
+      <div class="card-file">performance_logger.py</div>
+    </div>
+
+    <div class="shipped-card">
+      <span class="card-tag tag-main">On Main</span>
+      <h3>Deep Soul Synthesis</h3>
+      <p>When soul patterns exceed 50 lines, LLM synthesises them into 10 category-tagged insights — [BEHAVIOR|STYLE|DOMAIN|MEMORY]. No more top-10 trim.</p>
+      <div class="card-file">god_soul.md · max_tokens 800</div>
+    </div>
+
+    <div class="shipped-card new">
+      <span class="card-tag tag-branch">Branch → Main</span>
+      <h3>Docker Sandbox Safety</h3>
+      <p>Zero patches touch production code until pytest passes inside an isolated Docker container. In-process fallback if Docker unavailable.</p>
+      <div class="card-file">extensions/sandbox/DockerSafeApply</div>
+    </div>
+
+    <div class="shipped-card new">
+      <span class="card-tag tag-new">New · Branch</span>
+      <h3>AgentPool — 6 Hot-Swap Models</h3>
+      <p>Swap specialist models on demand: coding / trading / writing / medical / sleep / default. One model in RAM at a time. POST /agent/swap/{type}.</p>
+      <div class="card-file">core/agent_pool.py · asyncio.Lock</div>
+    </div>
+
+    <div class="shipped-card new">
+      <span class="card-tag tag-new">New · Branch</span>
+      <h3>X-ZERO Market Connectors</h3>
+      <p>4 read-only market signal connectors: Manifold (probability edge), Kalshi (bid-spread), Hyperliquid (funding-rate), Jupiter v2 (price-impact gate).</p>
+      <div class="card-file">extensions/xzero/ · 4 connectors</div>
+    </div>
+
+    <div class="shipped-card new">
+      <span class="card-tag tag-new">New · Branch</span>
+      <h3>Native Mobile App (SwiftUI)</h3>
+      <p>5-screen iPhone app: live status, AutoGenesis trigger, evolution log tail, agent hot-swap panel. Connects via Tailscale or ngrok.</p>
+      <div class="card-file">mobile/ · OasisApp · AgentView · EvolveView</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════ SKILLS ═══════════════ -->
+<section id="skills">
+  <div class="section-tag">// capabilities by module</div>
+  <h2>What GodLocal <em>actually does.</em></h2>
+  <p class="section-sub">14 modules. Each a distinct skill. All running locally, zero egress.</p>
+
+  <div class="skills-wrap">
+
+    <div class="skill-row">
+      <div class="skill-label">
+        <div class="skill-name">sleep_cycle()</div>
+        <div class="skill-file">godlocal_v5.py</div>
+      </div>
+      <div class="skill-desc">
+        Nightly hippocampal-replay at 01:00 UTC. 5 phases: memory consolidation → self-evolve → performance analysis → soul prune (deep LLM synthesis) → AutoGenesis (code evolution). Compounds intelligence without retraining.
+        <ul class="skill-bullets">
+          <li>Phase 1: Memory consolidation</li>
+          <li>Phase 2: Self-evolve</li>
+          <li>Phase 3: Perf analysis</li>
+          <li>Phase 3b: Soul synthesis (LLM, 800 tokens)</li>
+          <li>Phase 4: AutoGenesis dry-run</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="skill-row">
+      <div class="skill-label">
+        <div class="skill-name">AutoGenesis</div>
+        <div class="skill-file">oasis_autogenesis.py</div>
+      </div>
+      <div class="skill-desc">
+        X100 OASIS AutoGenesis Engine — self-evolving code intelligence layer. FEP surprise metrics identify stale patterns; LLMBridge generates patches; SafeApply tests in Docker sandbox before writing. Full rollback via backup chain.
+        <ul class="skill-bullets">
+          <li>FEPMetrics — surprise scoring</li>
+          <li>CodeScanner — in-memory hash tracking</li>
+          <li>DockerSafeApply — pytest isolation</li>
+          <li>LLMBridge — MLX/Ollama generation</li>
+          <li>CHANGELOG auto-docs</li>
+          <li>iPhone Shortcuts server (:7100)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="skill-row">
+      <div class="skill-label">
+        <div class="skill-name">AgentPool</div>
+        <div class="skill-file">core/agent_pool.py</div>
+      </div>
+      <div class="skill-desc">
+        6 specialist models hot-swappable via API. One model in RAM at a time — swap evicts previous to free memory. asyncio.Lock prevents race conditions. AutoGenesis can call /agent/swap/coding before generating code patches.
+        <ul class="skill-bullets">
+          <li>default — Qwen3-4B-PARO</li>
+          <li>coding — DeepSeek-Coder-V2</li>
+          <li>trading — Qwen2.5-32B (temp 0.3)</li>
+          <li>writing — Qwen2.5-32B (temp 0.92)</li>
+          <li>medical — Llama-3.2-3B</li>
+          <li>sleep — Qwen3-8B-PARO</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="skill-row">
+      <div class="skill-label">
+        <div class="skill-name">X-ZERO Connectors</div>
+        <div class="skill-file">extensions/xzero/</div>
+      </div>
+      <div class="skill-desc">
+        4 market signal connectors — all read-only, no real trades without explicit LOCKED_LIMITS approval. DynamicAssessor + ResilienceGuard protect from runaway delegation. delegation_audit.jsonl logs every decision.
+        <ul class="skill-bullets">
+          <li>Manifold — probability edge</li>
+          <li>Kalshi — bid-spread signal (real-money, regulated)</li>
+          <li>Hyperliquid — funding-rate perps signal</li>
+          <li>Jupiter Enhanced — price-impact gate (SOL)</li>
+          <li>Polymarket — READ-ONLY feed</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="skill-row">
+      <div class="skill-label">
+        <div class="skill-name">ParoQuant Backend</div>
+        <div class="skill-file">paroquant_backend.py</div>
+      </div>
+      <div class="skill-desc">
+        4-bit quantized model inference via MLX (Apple Silicon) with Ollama as fallback. Auto-detects ROCm/CUDA/MPS/CPU. OllamaCompatAdapter for drop-in compatibility.
+        <ul class="skill-bullets">
+          <li>Qwen3-4B-PARO — ~1.8GB RAM</li>
+          <li>Qwen3-8B-PARO — ~4GB RAM (sleep)</li>
+          <li>Auto hardware detection</li>
+          <li>ROCm / CUDA / MPS / CPU</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="skill-row">
+      <div class="skill-label">
+        <div class="skill-name">Memory Engine</div>
+        <div class="skill-file">godlocal_v5.py</div>
+      </div>
+      <div class="skill-desc">
+        ChromaDB (semantic vector search) + SQLite (episodic, full history). Nightly consolidation promotes important facts to long-term storage. Soul synthesis compresses patterns into tagged insights.
+        <ul class="skill-bullets">
+          <li>Semantic recall via ChromaDB</li>
+          <li>Full episodic history (SQLite)</li>
+          <li>Hippocampal replay compression</li>
+          <li>POST /memory/store · GET /memory/search</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="skill-row">
+      <div class="skill-label">
+        <div class="skill-name">Performance Logger</div>
+        <div class="skill-file">performance_logger.py</div>
+      </div>
+      <div class="skill-desc">
+        DeepMind-inspired LOCKED/snapshot/rollback/rotation cycle. Tracks correction_rate, latency_ms, tokens_used per interaction. Auto-rollback if correction_rate degrades &gt;10pp.
+        <ul class="skill-bullets">
+          <li>was_corrected flag (RU+EN prefix)</li>
+          <li>LOCKED sections prevent LLM overwrite</li>
+          <li>Weekly snapshot → tasks/lessons.md</li>
+          <li>Auto-rollback on degradation</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="skill-row">
+      <div class="skill-label">
+        <div class="skill-name">MRIAnalyzer</div>
+        <div class="skill-file">godlocal_v5_modules.py</div>
+      </div>
+      <div class="skill-desc">
+        HIPAA-compliant medical image analysis. Zero PHI egress — all processing local. DICOM + NIfTI support. Enables B2B medical vertical at $299–999/mo.
+        <ul class="skill-bullets">
+          <li>DICOM / NIfTI input</li>
+          <li>Zero PHI egress guarantee</li>
+          <li>doctor.md soul</li>
+          <li>Llama-3.2-3B agent</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="skill-row">
+      <div class="skill-label">
+        <div class="skill-name">Mobile App (SwiftUI)</div>
+        <div class="skill-file">mobile/</div>
+      </div>
+      <div class="skill-desc">
+        Native iPhone app — control your sovereign AI from your pocket. 4 tabs: live status snapshot, AutoGenesis task trigger with dry-run mode, evolution log, agent hot-swap panel.
+        <ul class="skill-bullets">
+          <li>GET /mobile/status</li>
+          <li>POST /mobile/evolve (dry-run toggle)</li>
+          <li>POST /agent/swap/{type}</li>
+          <li>Tailscale / ngrok for remote</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════ SLEEP CYCLE ═══════════════ -->
+<section id="sleep">
+  <div class="section-tag">// the differentiator</div>
+  <h2><em>sleep_cycle()</em> is the product.</h2>
+  <p class="section-sub">Every night at 01:00 UTC, while you sleep, GodLocal compounds. The longer you use it — the smarter it gets. Without retraining. Without paying OpenAI.</p>
+
+  <div class="sleep-phases">
+    <div class="phase">
+      <div class="phase-num">1</div>
+      <div class="phase-name">Memory Consolidation</div>
+      <div class="phase-sub">Hippocampal replay. Short-term → long-term. Noise pruned.</div>
+    </div>
+    <div class="phase">
+      <div class="phase-num">2</div>
+      <div class="phase-name">Self-Evolve</div>
+      <div class="phase-sub">self_evolve.py runs. was_corrected patterns → improvement candidates.</div>
+    </div>
+    <div class="phase">
+      <div class="phase-num">3</div>
+      <div class="phase-name">Performance Analysis</div>
+      <div class="phase-sub">correction_rate · latency_ms · tokens_used. Auto-rollback if degraded.</div>
+    </div>
+    <div class="phase">
+      <div class="phase-num">3b</div>
+      <div class="phase-name">Soul Synthesis</div>
+      <div class="phase-sub">Deep LLM compression. [BEHAVIOR|STYLE|DOMAIN|MEMORY] — 10 insights, 800 tokens.</div>
+    </div>
+    <div class="phase">
+      <div class="phase-num">4</div>
+      <div class="phase-name">AutoGenesis</div>
+      <div class="phase-sub">Code patches proposed. Docker sandbox validates. CHANGELOG updated.</div>
+    </div>
+  </div>
+
+  <div class="hero-terminal" style="max-width:100%">
+    <div class="terminal-bar">
+      <span class="t-red"></span>
+      <span class="t-yellow"></span>
+      <span class="t-green"></span>
+    </div>
+    <div class="terminal-line"><span class="prompt">$ </span><span class="cmd">python sleep_scheduler.py</span></div>
+    <div class="terminal-line"><span class="out">[01:00] 🌙 sleep_cycle() starting — 2026-02-24T01:00:00Z</span></div>
+    <div class="terminal-line"><span class="out">[01:00] Phase 1: 1,204 session memories → 847 consolidated (0.70x)</span></div>
+    <div class="terminal-line"><span class="out">[01:01] Phase 2: self_evolve() — 3 corrections learned</span></div>
+    <div class="terminal-line"><span class="out">[01:02] Phase 3: correction_rate=0.94 · avg_latency=1.2s ✓</span></div>
+    <div class="terminal-line"><span class="out">[01:03] Phase 3b: soul synthesis — 12 patterns → 10 insights [BEHAVIOR×4 STYLE×3 DOMAIN×2 MEMORY×1]</span></div>
+    <div class="terminal-line"><span class="highlight">[01:04] Phase 4: AutoGenesis — 2 patches proposed · sandbox ✓ · CHANGELOG updated</span></div>
+    <div class="terminal-line"><span class="out">[01:05] ✅ sleep_cycle() complete in 4.3s</span></div>
+  </div>
+</section>
+
+<!-- ═══════════════ VS ═══════════════ -->
+<section>
+  <div class="section-tag">// the reckoning</div>
+  <h2>You've been renting <em>intelligence you don't own.</em></h2>
+  <p class="section-sub">ChatGPT is a service. GodLocal is infrastructure.</p>
+
+  <div class="compare-grid">
+    <div class="compare-col bad">
+      <div class="compare-title">// The Old Way</div>
+      <div class="compare-item">$20–200/month, forever. Renting, not owning.</div>
+      <div class="compare-item">Every message exits your machine. Your strategy. Your codebase. Gone.</div>
+      <div class="compare-item">Forgets you every session. Doesn't know your stack.</div>
+      <div class="compare-item">Generic personality. Useful to no one in particular.</div>
+      <div class="compare-item">Static. Doesn't evolve. Same model it was last year.</div>
+      <div class="compare-item">API rate limits. Downtime. Terms that can change.</div>
+    </div>
+    <div class="compare-col good">
+      <div class="compare-title">// GodLocal</div>
+      <div class="compare-item">Free. Forever. One install. AGPL-3.0 licensed.</div>
+      <div class="compare-item">Zero bytes exit your machine. HIPAA-compliant by architecture.</div>
+      <div class="compare-item">Remembers everything. Consolidates every night.</div>
+      <div class="compare-item">Soul files. Personality as code. Forkable. Versionable.</div>
+      <div class="compare-item">Self-evolves via AutoGenesis. Gets smarter every night.</div>
+      <div class="compare-item">Your hardware. Your rules. No rate limits. No vendor lock.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ARCHITECTURE ═══════════════ -->
+<section>
+  <div class="section-tag">// under the hood</div>
+  <h2>Architecture. <em>Nothing exits this box.</em></h2>
+
+  <div class="arch-box">
+    <pre style="color:#555">YOUR MACHINE ─────────────────────────────────────────────────────────
+│
+│  <span style="color:#00FF41">SOUL</span>          warrior.md / doctor.md / writer.md / sovereign.md
+│                personality as code — forkable, versionable, sellable
+│                ↓
+│  <span style="color:#00FF41">BRAIN</span>         ParoQuant 4-bit · MLX Apple Silicon · Ollama fallback
+│                Qwen3-4B-PARO (daily) · Qwen3-8B-PARO (sleep)
+│                <span style="color:#a87fff">AgentPool: 6 hot-swap specialists (new v5.1)</span>
+│                ↓
+│  <span style="color:#00FF41">MEMORY</span>        ChromaDB (semantic) + SQLite (episodic, full history)
+│                Hippocampal replay · nightly consolidation
+│                ↓
+│  <span style="color:#00FF41">AUTOGENESIS</span>   FEPMetrics → LLMBridge → DockerSafeApply → CHANGELOG
+│                <span style="color:#a87fff">Docker sandbox validation before any file write (new v5.1)</span>
+│                ↓
+│  <span style="color:#00FF41">X-ZERO</span>        DynamicAssessor · ResilienceGuard · LOCKED_LIMITS
+│                <span style="color:#a87fff">Manifold / Kalshi / Hyperliquid / Jupiter (new v5.1)</span>
+│                delegation_audit.jsonl — every decision logged
+│                ↓
+│  <span style="color:#00FF41">BODY</span>          file · web · shell · MRI · calendar · Telegram
+│                SafeExecutor: whitelist-only shell
+│                ↓
+│  <span style="color:#00FF41">MOBILE</span>        SwiftUI iPhone app (new v5.1)
+│                StatusView · EvolveView · LogView · AgentView
+│                ↓
+│  <span style="color:#00FF41">SLEEP</span>         sleep_cycle() — 01:00 UTC, nightly
+│                5 phases: memory → self-evolve → perf → soul → autogenesis
+│
+│  REST API      POST /chat · POST /sleep · GET /memory · GET /status
+│                GET /dashboard · POST /agent/swap/{type} · GET /agent/status
+│                POST /mobile/evolve · POST /evolve · POST /rollback/{file}
+│
+└─────────────────────────────────────────────────────────────────────
+  zero bytes exit · no API key · no subscription · AGPL-3.0</pre>
+  </div>
+</section>
+
+<!-- ═══════════════ SOULS ═══════════════ -->
+<section>
+  <div class="section-tag">// soul marketplace</div>
+  <h2>Personality as code. <em>Fork it. Sell it. Make it yours.</em></h2>
+  <p class="section-sub">Soul files are markdown that define who your AI is. Fork community souls. Build your own. Sell for 70% revenue share.</p>
+
+  <div class="shipped-grid">
+    <div class="shipped-card">
+      <div style="font-size:0.72rem;color:#555;margin-bottom:8px">soul · X100 gate</div>
+      <h3 style="color:var(--cyan)">X-ZERO</h3>
+      <p>"Cold. Precise. I never celebrate. I only calculate." — quantitative trading, market signals, delegation audit.</p>
+      <div class="card-file">quant · solana · X100 gate</div>
+    </div>
+    <div class="shipped-card">
+      <div style="font-size:0.72rem;color:#555;margin-bottom:8px">soul · Medical B2B</div>
+      <h3 style="color:var(--cyan)">Doctor</h3>
+      <p>"I analyze. I never diagnose. Zero PHI ever exits this machine." — HIPAA-by-architecture MRI analysis.</p>
+      <div class="card-file">HIPAA · MRI · zero-egress</div>
+    </div>
+    <div class="shipped-card">
+      <div style="font-size:0.72rem;color:#555;margin-bottom:8px">soul · writing</div>
+      <h3 style="color:var(--cyan)">Editor</h3>
+      <p>"Short sentences. Active voice. I cut 30% of every draft before you see it." — content, copywriting, editing.</p>
+      <div class="card-file">copywriting · editing</div>
+    </div>
+    <div class="shipped-card">
+      <div style="font-size:0.72rem;color:#555;margin-bottom:8px">soul · engineering</div>
+      <h3 style="color:var(--cyan)">Architect</h3>
+      <p>"I review architecture, not features. What breaks this at 10x load?" — systems design, code review.</p>
+      <div class="card-file">engineering · architecture</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ PRICING ═══════════════ -->
+<section id="pricing">
+  <div class="section-tag">// pricing</div>
+  <h2>No subscription needed. <em>Start free. Forever.</em></h2>
+  <p class="section-sub">Core is AGPL-3.0. Pro is for commercial use. X100 Gate is for the sovereign.</p>
+
+  <div class="pricing-grid">
+    <div class="price-card">
+      <div class="price-tier">Tier 0</div>
+      <div class="price-name">Core</div>
+      <div class="price-amount">$0</div>
+      <div class="price-desc">AGPL-3.0 licensed. No strings attached.</div>
+      <ul class="price-features">
+        <li>Any local model (Qwen/Llama/Mistral)</li>
+        <li>sleep_cycle() — nightly 5 phases</li>
+        <li>ChromaDB + SQLite memory</li>
+        <li>REST API + Docker</li>
+        <li>AutoGenesis (dry-run)</li>
+        <li>9 shipped capabilities</li>
+      </ul>
+      <a class="price-link" href="https://github.com/GODLOCAL/godlocal" target="_blank">Install Free</a>
+    </div>
+
+    <div class="price-card featured">
+      <div class="price-tier">Tier 1</div>
+      <div class="price-name">Developer Pro</div>
+      <div class="price-amount">$9<span style="font-size:1rem;font-weight:400">/mo</span></div>
+      <div class="price-desc">Commercial license — closed-source use.</div>
+      <ul class="price-features">
+        <li>Everything in Core</li>
+        <li>Commercial closed-source use</li>
+        <li>Sleep analytics dashboard</li>
+        <li>AgentPool — 6 hot-swap specialists</li>
+        <li>Soul sync across devices</li>
+        <li>Priority support</li>
+      </ul>
+      <a class="price-link" href="mailto:license@godlocal.ai?subject=GodLocal Developer Pro">→ Join Pro</a>
+    </div>
+
+    <div class="price-card">
+      <div class="price-tier">Tier 2</div>
+      <div class="price-name">X100 Gate</div>
+      <div class="price-amount">10K<span style="font-size:0.9rem"> $X100</span></div>
+      <div class="price-desc">Exclusive souls. Sovereign access.</div>
+      <ul class="price-features">
+        <li>warrior.md + sovereign.md souls</li>
+        <li>X-ZERO market connectors</li>
+        <li>X100 OASIS community</li>
+        <li>Everything in Pro</li>
+      </ul>
+      <a class="price-link" href="https://x100-app.vercel.app/" target="_blank">→ Get $X100</a>
+    </div>
+
+    <div class="price-card">
+      <div class="price-tier">Tier 3</div>
+      <div class="price-name">Medical B2B</div>
+      <div class="price-amount">$299<span style="font-size:0.85rem">/mo</span></div>
+      <div class="price-desc">HIPAA-by-architecture. Zero PHI egress.</div>
+      <ul class="price-features">
+        <li>MRIAnalyzer (DICOM / NIfTI)</li>
+        <li>Zero PHI egress guarantee</li>
+        <li>doctor.md soul</li>
+        <li>Llama-3.2-3B medical agent</li>
+        <li>Compliance documentation</li>
+      </ul>
+      <a class="price-link" href="mailto:license@godlocal.ai?subject=GodLocal Medical Demo">→ Book Demo</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer>
+  <div class="footer-left">
+    GodLocal v5.1 · AGPL-3.0 + Commercial ·
+    <a href="https://github.com/GODLOCAL/godlocal" target="_blank">github.com/GODLOCAL/godlocal</a><br>
+    <span style="color:#333;font-size:0.68rem">Copyright © 2026 Rostyslav Oliinyk</span>
+  </div>
+  <div class="footer-links">
+    <a href="https://github.com/GODLOCAL/godlocal" target="_blank">GitHub</a>
+    <a href="https://github.com/GODLOCAL/godlocal/blob/main/LICENSE" target="_blank">License</a>
+    <a href="mailto:license@godlocal.ai">Contact</a>
+    <a href="https://x100-app.vercel.app/" target="_blank">X100 OASIS</a>
+    <a href="https://twitter.com/kitbtc" target="_blank">@kitbtc</a>
+  </div>
+</footer>
+
+</main>
+
+<script>
+// Matrix rain (subtle background)
+const canvas = document.getElementById('matrix-canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノ'.split('');
+const cols = Math.floor(canvas.width / 16);
+const drops = Array(cols).fill(0).map(() => Math.random() * -100);
+function drawMatrix() {
+  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#00FF41';
+  ctx.font = '12px monospace';
+  drops.forEach((y, i) => {
+    const char = chars[Math.floor(Math.random() * chars.length)];
+    ctx.fillText(char, i * 16, y * 16);
+    if (y * 16 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  });
+}
+setInterval(drawMatrix, 50);
+</script>
+</body>
+</html>
