@@ -747,6 +747,62 @@ async def store_memory(content: str, importance: float = 0.5):
     return {"status": "stored", "id": mid}
 
 
+
+# ── Agent Pool — Hot-Swap (v5.1 Developer Pro) ────────────────────────────────
+try:
+    from core.agent_pool import agent_pool as _agent_pool
+    _AGENT_POOL_AVAILABLE = True
+except ImportError:
+    _agent_pool = None
+    _AGENT_POOL_AVAILABLE = False
+
+@app.post("/agent/swap/{agent_type}")
+async def swap_agent(agent_type: str, api_key: str = Depends(verify_api_key)):
+    """Hot-swap to a specialist agent model. Evicts previous model from RAM."""
+    if not _AGENT_POOL_AVAILABLE or _agent_pool is None:
+        raise HTTPException(status_code=503, detail="AgentPool unavailable — install mlx_lm")
+    result = await _agent_pool.swap(agent_type)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@app.get("/agent/status")
+async def agent_status():
+    """Current agent pool state — available agents, active model, swap count."""
+    if not _AGENT_POOL_AVAILABLE or _agent_pool is None:
+        return {"available": False, "reason": "AgentPool not loaded"}
+    return _agent_pool.status()
+
+# ── Mobile API endpoints (SwiftUI OasisApp) ───────────────────────────────────
+@app.get("/mobile/status")
+async def mobile_status():
+    """Compact status snapshot for iPhone StatusView."""
+    base = await get_status()  # reuse existing /status handler
+    return {
+        "soul_loaded": base.get("soul_loaded"),
+        "memory_vectors": base.get("memory", {}).get("total_vectors") if isinstance(base.get("memory"), dict) else None,
+        "session_id": base.get("session_id"),
+        "sleep_cycle_last": base.get("sleep_cycle_last"),
+        "autogenesis_evolutions": base.get("autogenesis_evolutions"),
+    }
+
+@app.post("/mobile/evolve")
+async def mobile_evolve(task: str, apply: bool = False, api_key: str = Depends(verify_api_key)):
+    """Trigger AutoGenesis evolution from iPhone EvolveView."""
+    try:
+        from oasis_autogenesis import AutoGenesis
+        genesis = AutoGenesis(root=".")
+        result = genesis.evolve(task=task, apply=apply)
+        return {
+            "evolution": result.get("evolution"),
+            "proposed_files": result.get("proposed_files", []),
+            "applied": result.get("applied", []),
+            "elapsed_s": result.get("elapsed_s"),
+            "diffs_preview": {list(d.keys())[0]: list(d.values())[0][:500] for d in result.get("diffs", []) if d},
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     print("""
 ╬══════════════════════════════════════════════════════════╖

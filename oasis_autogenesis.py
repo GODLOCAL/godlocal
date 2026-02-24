@@ -439,6 +439,20 @@ Rules:
         self.fep = FEPMetrics()
         self.llm = LLMBridge(mlx_model=mlx_model)
         self.safe_apply = SafeApply(self.scanner)
+        # AgentPool — hot-swap for multi-specialist evolution tasks
+        try:
+            from core.agent_pool import AgentPool as _AgentPool
+            self.agent_pool = _AgentPool()
+            logger.info("[AutoGenesis] AgentPool wired ✓")
+        except ImportError:
+            self.agent_pool = None
+        # DockerSafeApply — isolated container testing (if Docker available)
+        try:
+            from extensions.sandbox.safe_apply import DockerSafeApply as _DSA
+            self.docker_safe_apply = _DSA()
+            logger.info(f"[AutoGenesis] DockerSafeApply: docker={'✓' if self.docker_safe_apply._docker_available else 'fallback'}")
+        except Exception:
+            self.docker_safe_apply = None
         self.evolution_count = 0
         logger.info("🔥 BOG || OASIS AutoGenesis ACTIVATED 🔥")
         logger.info(f"  MLX: {MLX_AVAILABLE} | Ollama: {OLLAMA_AVAILABLE} | Soul: {bool(self.soul)}")

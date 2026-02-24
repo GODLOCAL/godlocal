@@ -1,0 +1,6 @@
+FROM python:3.12-slim
+WORKDIR /sandbox
+COPY requirements_tests.txt .
+RUN pip install --no-cache-dir -r requirements_tests.txt
+VOLUME /sandbox
+CMD ["tail", "-f", "/dev/null"]

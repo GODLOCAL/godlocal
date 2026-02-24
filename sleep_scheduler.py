@@ -42,8 +42,38 @@ def _start_autogenesis_server():
     except Exception as e:
         logging.error(f"AutoGenesis server failed: {e}")
 
+def _sandbox_preflight() -> bool:
+    """Run pytest in Docker sandbox before sleep_cycle(). Skip if Docker unavailable."""
+    try:
+        from extensions.sandbox.safe_apply import DockerSafeApply
+        sa = DockerSafeApply()
+        if not sa._docker_available:
+            logging.info("[sleep_scheduler] Docker unavailable — skipping sandbox preflight")
+            return True
+        import subprocess
+        result = subprocess.run(
+            ["docker", "run", "--rm",
+             "-v", f"{os.getcwd()}:/sandbox",
+             "-w", "/sandbox",
+             "godlocal-sandbox",
+             "python", "-m", "pytest", "tests/", "-x", "-q", "--tb=short"],
+            capture_output=True, text=True, timeout=120
+        )
+        if result.returncode != 0:
+            logging.warning(f"[sleep_scheduler] Sandbox preflight FAILED:\n{result.stdout[-400:]}")
+            return False
+        logging.info("[sleep_scheduler] Sandbox preflight ✓")
+        return True
+    except Exception as e:
+        logging.warning(f"[sleep_scheduler] Sandbox preflight skipped: {e}")
+        return True  # Don't block sleep_cycle if sandbox setup fails
+
+
 def run_sleep_cycle():
     logging.info(f"🌙 sleep_cycle() starting — {datetime.now().isoformat()}")
+    if not _sandbox_preflight():
+        logging.error("❌ sleep_cycle() aborted — sandbox preflight failed")
+        return
     try:
         from godlocal_v5 import GodLocalAgent
         agent = GodLocalAgent()

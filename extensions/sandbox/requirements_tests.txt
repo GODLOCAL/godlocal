@@ -16,7 +16,7 @@ ollama>=0.1.0
 
 # Self-evolve
 schedule>=1.2.0
-# Docker sandbox
+# Sandbox test extras
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
 docker>=6.1.0
-# X-ZERO connectors
-requests>=2.31.0
