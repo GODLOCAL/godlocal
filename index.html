@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GODLOCAL — Sovereign AI</title>
+
+<style>
+:root {
+  --bg: #050510;
+  --neon-blue: #00f0ff;
+  --neon-pink: #ff00ff;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #000;
+  color: white;
+  overflow-x: hidden;
+}
+
+canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: -1;
+}
+
+section {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+  padding: 40px;
+}
+
+h1 {
+  font-size: 4rem;
+  background: linear-gradient(90deg, var(--neon-blue), var(--neon-pink));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.btn {
+  padding: 12px 30px;
+  margin: 15px;
+  border-radius: 30px;
+  border: 1px solid var(--neon-blue);
+  background: transparent;
+  color: var(--neon-blue);
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.btn:hover {
+  background: var(--neon-blue);
+  color: black;
+  box-shadow: 0 0 20px var(--neon-blue);
+}
+
+.parallax {
+  transform: translateZ(0);
+  transition: transform 0.2s ease-out;
+}
+
+#chart {
+  width: 80%;
+  max-width: 900px;
+  height: 400px;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="brain"></canvas>
+
+<section class="parallax">
+  <h1>GODLOCAL</h1>
+  <p>Your AI. Your Machine. No Cloud.</p>
+  <button class="btn" onclick="login()">Login with GitHub</button>
+</section>
+
+<section class="parallax">
+  <h2>Contributions Over Time</h2>
+  <canvas id="chart"></canvas>
+</section>
+
+<script>
+/* =======================
+   🧠 LIVE BRAIN ANIMATION
+======================= */
+const canvas = document.getElementById("brain");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+window.addEventListener("resize", () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+
+let particles = [];
+
+for (let i = 0; i < 120; i++) {
+  particles.push({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    dx: (Math.random() - 0.5) * 1,
+    dy: (Math.random() - 0.5) * 1
+  });
+}
+
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  particles.forEach(p => {
+    p.x += p.dx;
+    p.y += p.dy;
+
+    if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+    if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+    ctx.fillStyle = "#00f0ff";
+    ctx.fill();
+  });
+
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i; j < particles.length; j++) {
+      let dx = particles[i].x - particles[j].x;
+      let dy = particles[i].y - particles[j].y;
+      let dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 120) {
+        ctx.strokeStyle = "rgba(255,0,255,0.1)";
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x, particles[i].y);
+        ctx.lineTo(particles[j].x, particles[j].y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(animate);
+}
+
+animate();
+
+/* =======================
+   🌌 PARALLAX EFFECT
+======================= */
+document.addEventListener("mousemove", e => {
+  document.querySelectorAll(".parallax").forEach(layer => {
+    const speed = 0.02;
+    const x = (window.innerWidth - e.pageX * speed) / 100;
+    const y = (window.innerHeight - e.pageY * speed) / 100;
+    layer.style.transform = `translate(${x}px, ${y}px)`;
+  });
+});
+
+/* =======================
+   🔐 GITHUB LOGIN
+======================= */
+function login() {
+  window.location.href = "/auth/github";
+}
+
+/* =======================
+   📊 CONTRIBUTION GRAPH
+======================= */
+async function loadCommits() {
+  const response = await fetch(
+    "https://api.github.com/repos/GODLOCAL/godlocal/stats/commit_activity"
+  );
+  const data = await response.json();
+
+  const ctxChart = document.getElementById("chart").getContext("2d");
+
+  const labels = data.map((_, i) => `Week ${i + 1}`);
+  const commits = data.map(week => week.total);
+
+  new Chart(ctxChart, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: "Commits",
+        data: commits,
+        borderColor: "#00f0ff",
+        backgroundColor: "rgba(0,240,255,0.1)",
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { labels: { color: "white" } }
+      },
+      scales: {
+        x: { ticks: { color: "rgba(255,255,255,0.5)" }, grid: { color: "rgba(255,255,255,0.05)" } },
+        y: { ticks: { color: "rgba(255,255,255,0.5)" }, grid: { color: "rgba(255,255,255,0.05)" } }
+      }
+    }
+  });
+}
+
+const script = document.createElement("script");
+script.src = "https://cdn.jsdelivr.net/npm/chart.js";
+script.onload = loadCommits;
+document.body.appendChild(script);
+
+</script>
+</body>
+</html>
