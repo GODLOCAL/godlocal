@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Contributors — БОГ || OASIS</title>
+<style>
+  :root {
+    --green:  #00FF41;
+    --cyan:   #00E5FF;
+    --purple: #7B2FFF;
+    --bg:     #050505;
+    --panel:  #0d0d0d;
+    --border: #1a1a1a;
+    --text:   #cccccc;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 20px 80px;
+  }
+
+  /* ── Matrix rain bg ── */
+  canvas#rain {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0; opacity: 0.04; pointer-events: none;
+  }
+
+  .content { position: relative; z-index: 1; width: 100%; max-width: 900px; }
+
+  /* ── Header ── */
+  .logo {
+    text-align: center;
+    margin-bottom: 8px;
+    font-size: 28px;
+    font-weight: bold;
+    color: var(--green);
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(0,255,65,0.6);
+  }
+  .logo span { color: var(--cyan); }
+  .tagline {
+    text-align: center;
+    color: #333;
+    font-size: 13px;
+    letter-spacing: 2px;
+    margin-bottom: 50px;
+  }
+
+  /* ── Grid ── */
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 50px;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    animation: fadeIn 0.4s ease both;
+  }
+  .card:hover {
+    border-color: var(--cyan);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(0,229,255,0.08);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .card img {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    transition: border-color 0.2s;
+  }
+  .card:hover img { border-color: var(--cyan); }
+
+  .card .name {
+    font-size: 13px;
+    color: var(--green);
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-align: center;
+  }
+  .card .handle {
+    font-size: 11px;
+    color: #444;
+  }
+  .card .commits {
+    font-size: 11px;
+    color: var(--purple);
+    border: 1px solid var(--purple);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* ── CTA ── */
+  .cta {
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 32px;
+    background: var(--panel);
+  }
+  .cta p {
+    color: #555;
+    font-size: 13px;
+    margin-bottom: 16px;
+    line-height: 1.7;
+  }
+  .cta-links { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .cta-btn {
+    padding: 9px 20px;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .cta-btn.primary {
+    background: var(--green);
+    color: #000;
+    border: none;
+    font-weight: bold;
+  }
+  .cta-btn.primary:hover { opacity: 0.85; }
+  .cta-btn.secondary {
+    background: transparent;
+    color: var(--cyan);
+    border: 1px solid var(--cyan);
+  }
+  .cta-btn.secondary:hover { background: rgba(0,229,255,0.08); }
+
+  /* ── Footer ── */
+  footer {
+    margin-top: 50px;
+    text-align: center;
+    font-size: 11px;
+    color: #222;
+    letter-spacing: 1px;
+  }
+  footer a { color: #333; text-decoration: none; }
+  footer a:hover { color: var(--green); }
+
+  /* ── Loader ── */
+  #loader {
+    text-align: center;
+    color: #333;
+    padding: 40px;
+    font-size: 13px;
+    grid-column: 1/-1;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="rain"></canvas>
+
+<div class="content">
+  <div class="logo">БОГ&nbsp;||&nbsp;<span>OASIS</span></div>
+  <div class="tagline">CONTRIBUTORS — BUILT IN THE OPEN</div>
+
+  <div id="grid">
+    <div id="loader">loading contributors…</div>
+  </div>
+
+  <div class="cta">
+    <p>
+      Want to be part of this?<br/>
+      Submit a PR, open an issue, or reach out directly.
+    </p>
+    <div class="cta-links">
+      <a class="cta-btn primary"
+         href="https://github.com/GODLOCAL/godlocal/pulls"
+         target="_blank">OPEN PR</a>
+      <a class="cta-btn secondary"
+         href="https://twitter.com/kitbtc"
+         target="_blank">@kitbtc</a>
+      <a class="cta-btn secondary"
+         href="https://t.me/provodnikro"
+         target="_blank">Telegram</a>
+    </div>
+  </div>
+
+  <footer>
+    <a href="https://github.com/GODLOCAL/godlocal" target="_blank">github.com/GODLOCAL/godlocal</a>
+    &nbsp;·&nbsp; MIT / AGPL-3.0
+  </footer>
+</div>
+
+<script>
+// ── Matrix rain ───────────────────────────────────────────────────────────────
+(function(){
+  const c = document.getElementById('rain');
+  const ctx = c.getContext('2d');
+  function resize(){ c.width = innerWidth; c.height = innerHeight; }
+  resize(); window.addEventListener('resize', resize);
+  const chars = 'アイウエオカキクケコ01БОГ#$%<>';
+  let drops = Array.from({length: Math.floor(innerWidth/14)}, () => Math.random() * 50 | 0);
+  setInterval(() => {
+    ctx.fillStyle = 'rgba(5,5,5,0.05)';
+    ctx.fillRect(0,0,c.width,c.height);
+    ctx.fillStyle = '#00FF41';
+    ctx.font = '13px Courier New';
+    drops.forEach((y, i) => {
+      ctx.fillText(chars[Math.random()*chars.length|0], i*14, y*14);
+      if(y*14 > c.height && Math.random() > 0.975) drops[i] = 0;
+      else drops[i]++;
+    });
+  }, 60);
+})();
+
+// ── Load contributors from GitHub API ────────────────────────────────────────
+async function loadContributors() {
+  const REPO = 'GODLOCAL/godlocal';
+  const grid = document.getElementById('grid');
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contributors?per_page=100`);
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+    const contributors = await res.json();
+
+    grid.innerHTML = '';
+
+    contributors.forEach((c, i) => {
+      const card = document.createElement('a');
+      card.className = 'card';
+      card.href = c.html_url;
+      card.target = '_blank';
+      card.style.animationDelay = `${i * 60}ms`;
+
+      const commitLabel = c.contributions === 1 ? '1 commit' : `${c.contributions} commits`;
+
+      card.innerHTML = `
+        <img src="${c.avatar_url}&s=144" alt="${c.login}" loading="lazy" />
+        <div class="name">${c.login}</div>
+        <div class="handle">@${c.login}</div>
+        <div class="commits">${commitLabel}</div>
+      `;
+      grid.appendChild(card);
+    });
+
+    if (contributors.length === 0) {
+      grid.innerHTML = '<div id="loader" style="color:#333">no contributors yet — be the first</div>';
+    }
+
+  } catch(err) {
+    console.error(err);
+    grid.innerHTML = `<div id="loader" style="color:#f44">failed to load: ${err.message}</div>`;
+  }
+}
+
+loadContributors();
+</script>
+</body>
+</html>
