@@ -30,6 +30,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
+from fastapi import Depends
+from fastapi.security import APIKeyHeader
+
+# ── Shared utils (device detection, capability flags, status formatting) ──
+try:
+    from utils import Capabilities, detect_device, format_status, atomic_write
+    UTILS_AVAILABLE = True
+except ImportError:
+    UTILS_AVAILABLE = False
+
+
 try:
     import ollama as _ollama_lib
     OLLAMA_AVAILABLE = True
@@ -524,10 +535,39 @@ app = FastAPI(title="GodLocal v5",
               description="Sovereign AI Studio — Chat · Images · Video · Apps · Audio · Medical",
               version="5.0.0", docs_url="/docs")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
+
+# ── API Key Security ─────────────────────────────────────────────────────────
+_API_KEY = os.environ.get("GODLOCAL_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(key: str = Depends(_api_key_header)):
+    """Optional API key auth. Set GODLOCAL_API_KEY env var to enable."""
+    if _API_KEY and key != _API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return key
+
                    allow_methods=["*"], allow_headers=["*"])
 
 agent: Optional[GodLocalAgent] = None
 
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Graceful shutdown: close DB connections, release GPU memory."""
+    logger.info("GodLocal shutting down...")
+    try:
+        if agent and hasattr(agent, "memory") and hasattr(agent.memory, "_close"):
+            agent.memory._close()
+    except Exception:
+        logger.exception("Error closing memory on shutdown")
+    try:
+        if agent and hasattr(agent, "paroquant") and agent.paroquant is not None:
+            if hasattr(agent.paroquant, "unload"):
+                agent.paroquant.unload()
+    except Exception:
+        logger.exception("Error unloading ParoQuant on shutdown")
+    logger.info("GodLocal shutdown complete.")
 
 class ChatReq(BaseModel):
     message: str
@@ -597,20 +637,38 @@ async def health(): return {"status": "ok"}
 @app.get("/status")
 async def status_route(): return agent.status()
 
+
+@app.post("/clear")
+async def clear_history(key: str = Depends(verify_api_key)):
+    """Reset conversation history and short-term memory."""
+    try:
+        if agent:
+            agent.history = []
+            if hasattr(agent, "memory") and hasattr(agent.memory, "clear_session"):
+                agent.memory.clear_session()
+        logger.info("Conversation history cleared via /clear")
+        return {"status": "cleared", "message": "Conversation history reset"}
+    except Exception as e:
+        logger.exception("Error in /clear")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/chat")
-async def chat(req: ChatReq):
+async def chat(req: ChatReq, key: str = Depends(verify_api_key)):
     return {"response": agent.chat(req.message), "soul": agent.soul.current_soul}
 
 @app.post("/create/app")
 async def create_app(req: AppReq):
-    try: return agent.generate_app(req.description, req.app_type)
-    except Exception as e: raise HTTPException(500, str(e))
+    try:
+        return agent.generate_app(req.description, req.app_type)
+    except Exception as e:
+        logger.exception("Error in /create/app")
+        raise HTTPException(500, detail=str(e))
 
 @app.post("/execute")
-async def execute(req: CmdReq): return agent.run_command(req.command)
+async def execute(req: CmdReq, key: str = Depends(verify_api_key)): return agent.run_command(req.command)
 
 @app.post("/sleep")
-async def trigger_sleep(): return agent.run_sleep_cycle()
+async def trigger_sleep(key: str = Depends(verify_api_key)): return agent.run_sleep_cycle()
 
 @app.get("/souls")
 async def list_souls(): return {"souls": agent.soul.list_souls(), "current": agent.soul.current_soul}

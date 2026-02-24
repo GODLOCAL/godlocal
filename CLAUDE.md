@@ -72,3 +72,37 @@
 - All new modules must register in the 14-module manifest inside `godlocal_v5.py`
 - Secrets live in `SecretsVault` — never hardcode API keys
 - When adding a new command to `godlocal_telegram.py`, add the corresponding handler AND update the `/help` command list
+---
+
+## Shared Utilities (utils.py) — REQUIRED reading
+
+`utils.py` is the **single source of truth** for:
+- `detect_device()` — ROCm/CUDA/MPS/CPU detection. **Import this, never re-implement.**
+- `Capabilities.*` — flags for ollama/airllm/chroma/self_evolve/paroquant. **Use, never re-check.**
+- `format_status(data)` — status formatter shared by API and Telegram bot.
+- `atomic_write(path, content)` — crash-safe file writes (tempfile + os.replace).
+
+```python
+from utils import detect_device, Capabilities, format_status, atomic_write
+```
+
+---
+
+## Performance Logger Contract
+
+`performance_logger.py` is the **telemetry backbone**:
+- `log_interaction(user_msg, assistant_msg, was_corrected)` — called after EVERY chat turn
+- `was_corrected` = True if user message starts with correction prefix (RU+EN matching in handle_message)
+- Data feeds `sleep_cycle()` Phase 3 → `update_soul_with_patterns()` → `god_soul.md [LEARNED_PATTERNS]`
+- Rotation: 5MB limit, 3 archives. Auto-rollback if correction_rate degrades >10pp.
+- **When adding a new module:** call `log_interaction` after any user-facing response.
+
+---
+
+## extensions/ — Optional Modules
+
+X-ZERO trading delegation and Polymarket connector live in `extensions/`:
+- `extensions/xzero/xzero_delegation.py`
+- `extensions/xzero/polymarket_connector.py`
+
+These are **opt-in** — not imported by core. Import explicitly if building X-ZERO features.

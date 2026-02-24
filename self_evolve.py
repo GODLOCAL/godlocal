@@ -21,6 +21,8 @@ import asyncio
 import json
 import re
 import sqlite3
+import logging
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -127,6 +129,9 @@ class SelfEvolveEngine:
         self.evolution_log = self.data_dir / "evolution_log.jsonl"
         self._last_report: Optional[str] = None
 
+        # Ensure conversations.db exists (auto-create on first run)
+        self._init_db()
+
         # ChromaDB
         self._chroma: Optional[object] = None
         if CHROMA_AVAILABLE:
@@ -135,7 +140,42 @@ class SelfEvolveEngine:
                     path=str(self.data_dir / "memory")
                 )
             except Exception as e:
-                print(f"[SelfEvolve] ChromaDB unavailable: {e}")
+                logger.exception("[SelfEvolve] ChromaDB initialization failed")
+
+
+    def _init_db(self) -> None:
+        """Create conversations.db with messages table if it doesn't exist."""
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            conn = sqlite3.connect(str(self.db_path))
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS messages (
+                    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                    role      TEXT    NOT NULL,
+                    content   TEXT    NOT NULL,
+                    timestamp TEXT    NOT NULL DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(timestamp)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_role ON messages(role, timestamp)")
+            conn.commit()
+            conn.close()
+        except sqlite3.Error as e:
+            logger.exception("[SelfEvolve] Failed to initialize conversations.db")
+
+
+    def log_message(self, role: str, content: str) -> None:
+        """Called by godlocal_v5.py after each chat turn to persist messages."""
+        try:
+            conn = sqlite3.connect(str(self.db_path))
+            conn.execute(
+                "INSERT INTO messages (role, content, timestamp) VALUES (?, ?, ?)",
+                (role, content, datetime.now().isoformat())
+            )
+            conn.commit()
+            conn.close()
+        except sqlite3.Error:
+            logger.exception("[SelfEvolve] Failed to log message")
 
     # ── Gap detection ─────────────────────────────────────────────────────────
 
@@ -167,7 +207,7 @@ class SelfEvolveEngine:
             rows = cur.fetchall()
             conn.close()
         except sqlite3.Error as e:
-            print(f"[SelfEvolve] DB error: {e}")
+            logger.exception(f"[SelfEvolve] DB error scanning gaps")
             return []
 
         for content, timestamp in rows:
