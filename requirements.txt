@@ -1,4 +1,4 @@
-# БОГ || OASIS v6 — Python dependencies
+# БОГ || OASIS v6 - Python dependencies
 
 # API server
 fastapi>=0.111.0
@@ -11,13 +11,20 @@ pydantic-settings>=2.2.0
 # LLM
 ollama>=0.1.0
 groq>=0.13.0             # Groq LPU cloud backend (~1000 tok/s)
-cerebras-cloud-sdk>=1.0.0  # Cerebras inference (~3000 tok/s, pip install cerebras-cloud-sdk)
-# mlx-lm>=0.12.0          # macOS Apple Silicon only — uncomment if using MLX
+cerebras-cloud-sdk>=1.0.0  # Cerebras inference (~3000 tok/s)
+# mlx-lm>=0.12.0          # macOS Apple Silicon only
 
-# BitNet b1.58 2B — CPU-native 1.58-bit inference (0.4GB RAM, 40% faster)
-# Install: pip install llama-cpp-python
-# Model:   huggingface-cli download microsoft/bitnet-b1.58-2B-4T --include '*.gguf' --local-dir models/
+# BitNet b1.58 2B - CPU-native 1.58-bit (0.4GB RAM, 40% faster)
+# pip install llama-cpp-python
+# huggingface-cli download microsoft/bitnet-b1.58-2B-4T --include "*.gguf" --local-dir models/
 llama-cpp-python>=0.2.0
+
+# LFM2.5-1.2B Thinking - ONNX Runtime (200+ tok/s GPU, ~40 tok/s CPU)
+# pip install onnxruntime optimum transformers
+# optimum-cli export onnx --model liquid-ai/lfm2.5-1.2b-thinking models/lfm2/
+# GPU: pip install onnxruntime-gpu && export LFM2_USE_GPU=true
+onnxruntime>=1.18.0
+optimum>=1.20.0
 
 # Memory
 chromadb>=0.5.0
@@ -47,6 +54,6 @@ trafilatura>=1.9.0
 aiofiles>=23.0.0
 aiohttp>=3.9.0
 
-# Optional extras (uncomment if needed)
-# kuzu>=0.3.0            # GitNexusMCPConnector graph DB
-# sentence-transformers  # GitNexusMCPConnector embeddings
+# Optional extras
+# kuzu>=0.3.0
+# sentence-transformers
