@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.message-payload-provider</string>
+        <key>NSExtensionPrincipalClass</key>
+        <string>$(PRODUCT_MODULE_NAME).MessagesViewController</string>
+    </dict>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <!-- Allow Picobot VPS (HTTP, no SSL on $5 tier) -->
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+    <key>CFBundleDisplayName</key>
+    <string>GodLocal</string>
+    <key>CFBundleShortVersionString</key>
+    <string>7.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>MinimumOSVersion</key>
+    <string>18.0</string>
+</dict>
+</plist>
