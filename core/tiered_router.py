@@ -200,11 +200,13 @@ class TieredRouter:
         elif tier == Tier.FAST:
             self.stats.fast_calls += 1
             self.stats.fast_saved_tokens += int(self.wasm.count_tokens_approx(prompt) * 0.6)
-            # Try Groq LPU first (~500 tok/s) — fall back to local Ollama on failure/absence
+            # Try Groq LPU first (~1000 tok/s on gpt-oss-20b) — fall back to Ollama on failure
             from core.groq_connector import GROQ_AVAILABLE, get_groq
             if GROQ_AVAILABLE:
                 try:
-                    return await get_groq().complete(prompt, tier="fast", max_tokens=max_tokens)
+                    return await get_groq().complete(
+                        prompt, task_type=task_type or "classify", max_tokens=max_tokens
+                    )
                 except Exception:
                     logger.warning("Groq FAST failed — falling back to Ollama")
             brain = self._get_fast_brain()
@@ -217,11 +219,13 @@ class TieredRouter:
 
         else:
             self.stats.full_calls += 1
-            # Try Groq LPU first (Kimi K2-0905, GPT-4 class) — fall back to local Ollama
+            # Try Groq LPU first (~400 tok/s on qwen3-32b / kimi-k2) — fall back to Ollama
             from core.groq_connector import GROQ_AVAILABLE, get_groq
             if GROQ_AVAILABLE:
                 try:
-                    return await get_groq().complete(prompt, tier="full", max_tokens=max_tokens)
+                    return await get_groq().complete(
+                        prompt, task_type=task_type or "analyze", max_tokens=max_tokens
+                    )
                 except Exception:
                     logger.warning("Groq FULL failed — falling back to Ollama")
             brain = self._get_brain()
