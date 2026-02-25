@@ -1,108 +1,71 @@
-# CLAUDE.md — GodLocal AI Workflow Rules
+# CLAUDE.md — GodLocal
 
-> This file is auto-read by Claude, Cursor, Windsurf, and compatible AI coding assistants.
-> It defines how AI agents should behave when working on the GodLocal codebase.
+> Auto-updated by Claude after every correction.
+> Target: ≤2.5K tokens. Every line earns its place.
 
----
+## Project Identity
 
-## Workflow Orchestration
+GodLocal v6 — sovereign local AI layer. Stack:
+- Core: `godlocal_v6.py`, `core/brain.py` (Brain / LLMBridge / MemoryEngine)
+- Agents: `agents/` — AutoGenesisV2, AgentPool 6-slot, GoalExecutor, ClawFeedAgent
+- X-ZERO: `agents/xzero/` — XZeroAgentSoul, XZeroHeartbeat
+- Extensions: `extensions/xzero/` (CIMD connectors: SolscanFree, VinextReplicate, MoonPayAgents)
+- Mobile: `mobile/` — NexaSDK, LLMBridgeNexa.swift, AudioBridgeMLX.swift
+- Web: `index.html` (Three.js), `server.js`, `contributors.html`
+- Skills: `.claude/skills/` — 57 curated + 930+ via antigravity
 
-### 1. Plan Node Default
-- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
-- If something goes sideways, STOP and re-plan immediately — don't keep pushing
-- Use plan mode for verification steps, not just building
-- Write detailed specs upfront to reduce ambiguity
+## Code Style (LOCKED)
 
-### 2. Subagent Strategy
-- Use subagents liberally to keep main context window clean
-- Offload research, exploration, and parallel analysis to subagents
-- For complex problems, throw more compute at it via subagents
-- One task per subagent for focused execution
+- Python 3.11+, type hints on all public methods
+- `from __future__ import annotations` at top of every Python file
+- Connectors: always extend `CIMDConnectorBase` from `extensions/xzero/cimd_connector_base.py`
+- Commit format: `БОГ || vX.Y.Z: <feature> [<domain>]`
+- Patch format: SEARCH/REPLACE surgical blocks (never full-file rewrite unless new file)
+- New file commits: use `GITHUB_COMMIT_MULTIPLE_FILES` with `upserts[]`
+- Always `encoding="utf-8"` on file writes
 
-### 3. Self-Improvement Loop
-- After ANY correction from the user: update `tasks/lessons.md` with the pattern
-- Write rules for yourself that prevent the same mistake
-- Ruthlessly iterate on these lessons until mistake rate drops
-- Review `tasks/lessons.md` at session start for the relevant project
+## Architecture Rules (LOCKED)
 
-### 4. Verification Before Done
-- Never mark a task complete without proving it works
-- Diff behaviour between main and your changes when relevant
-- Ask yourself: "Would a staff engineer approve this?"
-- Run tests, check logs, demonstrate correctness
+- Every new connector: (1) `openapi_schema()`, (2) `registration_manifest()`, (3) `run_tool(tool, params)`
+- Env vars in connectors — raise `EnvironmentError` with setup instructions if missing
+- Sleep cycle phases order: Phase1 Memory → Phase2 Self-evolve → Phase3 Perf → Phase3b Soul prune → Phase4 AutoGenesis → Phase5 XZeroHeartbeat
+- `god_soul.md` LOCKED sections: never overwrite. LLM synthesis triggers at >50 learned patterns
+- Auto-rollback if `correction_rate` degrades >10 percentage points
+- SYSTEM_PROMPT requires `[PLAN]` block before patches (Devin-style, 256-token JSON)
 
-### 5. Demand Elegance (Balanced)
-- For non-trivial changes: pause and ask "is there a more elegant way?"
-- If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"
-- Skip this for simple, obvious fixes — don't over-engineer
-- Challenge your own work before presenting it
+## Parallelism Patterns
 
-### 6. Autonomous Bug Fixing
-- When given a bug report: just fix it. Don't ask for hand-holding
-- Point at logs, errors, failing tests — then resolve them
-- Zero context switching required from the user
-- Go fix failing CI tests without being told how
+- Use `git worktrees` + separate Claude sessions for parallel tracks (Roblox / GodLocal / X100 content)
+- Batch independent GitHub commits in one `GITHUB_COMMIT_MULTIPLE_FILES` call
+- Run heartbeat + sleep_scheduler as non-blocking background tasks
 
----
+## Naming Conventions
 
-## Task Management
+- Connectors: `<Service>Connector` in `extensions/xzero/<service>_connector.py`
+- Agent souls: `<Name>AgentSoul` in `agents/<name>/agent_soul.py`
+- Heartbeats: `<Name>Heartbeat` in `agents/<name>/heartbeat.py`
+- Skills: kebab-case dirs in `.claude/skills/<skill-name>/`
+- Tweet→implement commits: include source handle in commit body, e.g. `[@crypsaf tweet 2026-02-25]`
 
-1. **Plan First:** Write plan to `tasks/todo.md` with checkable items
-2. **Verify Plan:** Check in before starting implementation
-3. **Track Progress:** Mark items complete as you go
-4. **Explain Changes:** High-level summary at each step
-5. **Document Results:** Add review section to `tasks/todo.md`
-6. **Capture Lessons:** Update `tasks/lessons.md` after corrections
+## X100 OASIS Context
 
----
+- Token: $X100, Solana, 100M supply; tiers Explorer(100)→Sovereign(1M)
+- Agent wallet: non-custodial, funded via MoonPayAgentsConnector
+- Swaps: Jupiter API (slippage ≤3% enforced in XZeroAgentSoul locked rules)
+- Monitoring: SolscanFreeConnector — `token_holders_total`, `top_address_transfers`, `token_data`
+- Alerts: Telegram only, gated by XZeroHeartbeat (quiet hours UTC 2–6)
+- Company structure: 3+ agents → Squads multisig → ROI leaderboard
 
-## Core Principles
+## Pending Wiring (Next AI Tasks)
 
-- **Simplicity First:** Make every change as simple as possible. Impact minimal code.
-- **No Laziness:** Find root causes. No temporary fixes. Senior developer standards.
-- **Minimal Impact:** Changes should only touch what's necessary. Avoid introducing bugs.
+1. GoalExecutor + ClawFeedAgent → `godlocal_v6.py` (`/goals/*`, `/feed*` endpoints)
+2. XZeroHeartbeat → `sleep_scheduler_v6.py` Phase 5 (non-blocking asyncio)
+3. NexaSDK xcframework → activate from stub (`./setup_nexa.sh`)
 
----
+## Self-Update Rule
 
-## GodLocal-Specific Rules
-
-- Always run `godlocal_v5.py` BEFORE `godlocal_telegram.py` (dependency order)
-- Never commit `god_soul.md` — it's in `.gitignore` (private user data)
-- `self_evolve.py` runs inside `sleep_cycle()` Phase 2 — don't call it standalone in tests
-- All new modules must register in the 14-module manifest inside `godlocal_v5.py`
-- Secrets live in `SecretsVault` — never hardcode API keys
-- When adding a new command to `godlocal_telegram.py`, add the corresponding handler AND update the `/help` command list
----
-
-## Shared Utilities (utils.py) — REQUIRED reading
-
-`utils.py` is the **single source of truth** for:
-- `detect_device()` — ROCm/CUDA/MPS/CPU detection. **Import this, never re-implement.**
-- `Capabilities.*` — flags for ollama/airllm/chroma/self_evolve/paroquant. **Use, never re-check.**
-- `format_status(data)` — status formatter shared by API and Telegram bot.
-- `atomic_write(path, content)` — crash-safe file writes (tempfile + os.replace).
-
-```python
-from utils import detect_device, Capabilities, format_status, atomic_write
+After every correction or new pattern:
 ```
-
----
-
-## Performance Logger Contract
-
-`performance_logger.py` is the **telemetry backbone**:
-- `log_interaction(user_msg, assistant_msg, was_corrected)` — called after EVERY chat turn
-- `was_corrected` = True if user message starts with correction prefix (RU+EN matching in handle_message)
-- Data feeds `sleep_cycle()` Phase 3 → `update_soul_with_patterns()` → `god_soul.md [LEARNED_PATTERNS]`
-- Rotation: 5MB limit, 3 archives. Auto-rollback if correction_rate degrades >10pp.
-- **When adding a new module:** call `log_interaction` after any user-facing response.
-
----
-
-## extensions/ — Optional Modules
-
-X-ZERO trading delegation and Polymarket connector live in `extensions/`:
-- `extensions/xzero/xzero_delegation.py`
-- `extensions/xzero/polymarket_connector.py`
-
-These are **opt-in** — not imported by core. Import explicitly if building X-ZERO features.
+Tell Claude: "Update CLAUDE.md so you don't make that mistake again"
+```
+Keep total size ≤ 2.5K tokens. Synthesize, don't append.
