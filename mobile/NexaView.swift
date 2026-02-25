@@ -1,14 +1,17 @@
 // mobile/NexaView.swift
 // GodLocal v6.8 — On-device AI chat view powered by NexaSDK
+// v7.0.5 — mic button via AudioBridgeMLX (Qwen3-ASR-0.6B realtime)
 
 import SwiftUI
 
 struct NexaView: View {
     @StateObject private var bridge = LLMBridgeNexa()
+    @StateObject private var audio  = AudioBridgeMLX()   // ← MLX-Audio-Swift
     @State private var inputText = ""
     @State private var selectedModel: NexaModel = .paro_4b
     @State private var selectedBackend: NexaBackend = .ane
     @State private var messages: [(role: String, text: String)] = []
+    @State private var isRecording = false
 
     private let neonBlue   = Color(hex: "#00f0ff")
     private let neonPink   = Color(hex: "#ff00ff")
@@ -17,7 +20,7 @@ struct NexaView: View {
 
     var body: some View {
         ZStack {
-            bgColor.ignoresSafeArea()
+            bgColor.ignoresEdges()
 
             VStack(spacing: 0) {
                 // ── Header ──
@@ -149,6 +152,15 @@ struct NexaView: View {
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.white.opacity(0.5))
             Spacer()
+            // STT status
+            if audio.isTranscribing {
+                HStack(spacing: 4) {
+                    Circle().fill(neonPink).frame(width: 5, height: 5)
+                    Text("listening…")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(neonPink.opacity(0.8))
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
@@ -159,7 +171,7 @@ struct NexaView: View {
 
     var inputBar: some View {
         HStack(spacing: 10) {
-            TextField("Ask GodLocal...", text: $inputText, axis: .vertical)
+            TextField("Ask GodLocal…", text: $inputText, axis: .vertical)
                 .font(.system(size: 14, design: .rounded))
                 .foregroundColor(.white)
                 .lineLimit(1...5)
@@ -169,6 +181,19 @@ struct NexaView: View {
                 .cornerRadius(20)
                 .overlay(RoundedRectangle(cornerRadius: 20).stroke(neonBlue.opacity(0.3), lineWidth: 1))
 
+            // ── Mic button (Qwen3-ASR-0.6B live transcription) ──
+            Button {
+                isRecording ? stopRecording() : startRecording()
+            } label: {
+                Image(systemName: isRecording ? "stop.circle.fill" : "mic.fill")
+                    .foregroundColor(isRecording ? neonPink : neonBlue.opacity(0.85))
+                    .frame(width: 40, height: 40)
+                    .background((isRecording ? neonPink : neonBlue).opacity(0.12))
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke((isRecording ? neonPink : neonBlue).opacity(0.35), lineWidth: 1))
+            }
+
+            // ── Send / Stop ──
             if bridge.isGenerating {
                 Button { bridge.cancelGeneration() } label: {
                     Image(systemName: "stop.fill")
@@ -197,6 +222,27 @@ struct NexaView: View {
 
     // MARK: - Actions
 
+    private func startRecording() {
+        isRecording = true
+        Task {
+            do {
+                try await audio.transcribeLive { partial in
+                    Task { @MainActor in
+                        inputText = partial
+                    }
+                }
+            } catch {
+                print("[NexaView] STT error: \(error)")
+            }
+            isRecording = false
+        }
+    }
+
+    private func stopRecording() {
+        isRecording = false
+        // MLX-Audio-Swift transcribeLive stops when audio session ends
+    }
+
     private func sendMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
@@ -210,7 +256,6 @@ struct NexaView: View {
     }
 
     private func buildPrompt(for query: String) -> String {
-        // Simple chat template
         let history = messages.suffix(6).map { m in
             m.role == "user" ? "User: \(m.text)" : "Assistant: \(m.text)"
         }.joined(separator: "\n")
@@ -239,8 +284,8 @@ struct MessageBubble: View {
                 .padding(.vertical, 10)
                 .background(
                     isUser
-                    ? LinearGradient(colors: [neonBlue.opacity(0.25), neonPink.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    : LinearGradient(colors: [Color.white.opacity(0.05), Color.white.opacity(0.03)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        ? LinearGradient(colors: [neonBlue.opacity(0.25), neonPink.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(colors: [Color.white.opacity(0.05), Color.white.opacity(0.03)], startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)

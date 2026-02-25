@@ -1,7 +1,7 @@
 # GodLocal Mobile — iPhone On-Device AI
 
 Run LFM2 24B (Liquid AI), PARO 4B, or Qwen3 entirely on your iPhone 17 Pro.  
-No cloud. No API key. ~40–60 tok/s on A19 Pro ANE.
+No cloud. No API key. ~40–60 toks/s on A19 Pro ANE.
 
 ---
 
@@ -52,7 +52,7 @@ First launch: tap a model → SDK downloads weights once (~5–25 min depending 
 ## Models
 
 | Model | Size | Speed (A19 Pro) | Best for |
-|-------|------|-----------------|----------|
+|-------|------|-----------------|---------|
 | **PARO 4B** | 1.8 GB | ~60 tok/s | Daily use, fast |
 | **LFM2 24B** | 4.8 GB | ~40 tok/s | Complex reasoning |
 | Qwen3 4B | 2.4 GB | ~55 tok/s | Coding |
@@ -67,11 +67,12 @@ LFM2 24B is a Mixture-of-Experts model — only 2B parameters active per token, 
 | File | Description |
 |------|-------------|
 | `LLMBridgeNexa.swift` | NexaSDK wrapper — model loading, ANE/GPU/CPU backend, streaming |
-| `NexaView.swift` | SwiftUI chat UI — model picker, stream bubble, tok/s badge |
+| `NexaView.swift` | SwiftUI chat UI — model picker, stream bubble, tok/s badge, 🎙 mic button |
 | `OasisApp.swift` | App entry point with TabView |
 | `setup_nexa.sh` | One-command setup script |
 | `LLMBridgeNexa_activated.swift` | Pre-activated reference (no stubs) |
 | `IPHONE17PRO_GUIDE.md` | Detailed 11-step guide with all links |
+| `AudioBridgeMLX.swift` | MLX-Audio-Swift TTS+STT wrapper |
 
 ---
 
@@ -103,12 +104,25 @@ LFM2 24B is a Mixture-of-Experts model — only 2B parameters active per token, 
 
 ## Audio — On-Device TTS + STT (Optional)
 
-`AudioBridgeMLX.swift` integrates [MLX-Audio-Swift](https://github.com/Prince_Canuma/MLX-Audio-Swift) for native voice on Apple Silicon:
+`AudioBridgeMLX.swift` integrates [MLX-Audio-Swift](https://github.com/Prince_Canuma/MLX-Audio-Swift) for native voice on Apple Silicon.
+
+**Mic button** in NexaView: tap 🎙 → live transcription (Qwen3-ASR-0.6B) → auto-fills input field.
 
 | Capability | Models |
 |-----------|--------|
 | **TTS** (text → speech) | Qwen3-TTS, Marvis, Soprano, Pocket — with streaming |
-| **STT** (speech → text) | LFM-2.5-Audio, Voxtral Realtime, Parakeet, Qwen3 ASR |
+| **STT** (speech → text) | **Qwen3-ASR-0.6B** *(default)*, LFM-2.5-Audio, Voxtral Realtime, Parakeet |
+
+### STT model comparison
+
+| Model | Size | iPhone 15 Pro | Notes |
+|-------|------|--------------|-------|
+| **Qwen3-ASR-0.6B (4bit)** | ~240 MB | realtime | Default. Fastest, lightest — WisprFlow alternative |
+| LFM-2.5-Audio | ~1.2 GB | realtime | Liquid AI, high accuracy |
+| Voxtral Realtime | ~0.8 GB | realtime | Streaming-optimized |
+| Parakeet | ~0.6 GB | realtime | English-only |
+
+> Source: [@Prince_Canuma](https://x.com/Prince_Canuma) — live transcription of Dwarkesh×Karpathy interview on M3 Max and iPhone 15 Pro.
 
 **Install (Xcode only — no script needed):**
 

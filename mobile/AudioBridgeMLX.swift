@@ -9,6 +9,8 @@
 //   let audio = AudioBridgeMLX()
 //   await audio.speak("Hello from GodLocal", voice: .qwen3)
 //   let text = await audio.transcribe(audioURL: fileURL)
+//   // Live transcription (Qwen3-ASR-0.6B, 4bit, realtime on iPhone 15+ Pro):
+//   await audio.transcribeLive { partial in print(partial) }
 
 import Foundation
 import AVFoundation
@@ -30,10 +32,12 @@ public enum TTSVoice: String, CaseIterable {
 // MARK: - STT Models
 
 public enum STTModel: String, CaseIterable {
-    case lfm25     = "LFM-2.5-Audio"       // Liquid AI — fits our ANE stack
-    case voxtral   = "Voxtral-Realtime"    // real-time streaming
+    /// Qwen3-ASR-0.6B quantized to 4bit — ~240MB, realtime on iPhone 15 Pro+
+    /// Source: github.com/Prince_Canuma/MLX-Audio-Swift  (prince_canuma tweet 2026-02)
+    case qwen3Asr  = "Qwen3-ASR-0.6B"   // ← DEFAULT: lightest, fastest, no cloud
+    case lfm25     = "LFM-2.5-Audio"    // Liquid AI — fits our ANE stack
+    case voxtral   = "Voxtral-Realtime" // real-time streaming
     case parakeet  = "Parakeet"
-    case qwen3Asr  = "Qwen3-ASR"
 
     var modelId: String { rawValue }
 }
@@ -47,7 +51,7 @@ public final class AudioBridgeMLX: ObservableObject {
     @Published public var isTranscribing = false
     @Published public var lastTranscription = ""
     @Published public var selectedVoice: TTSVoice = .qwen3
-    @Published public var selectedSTT: STTModel = .lfm25
+    @Published public var selectedSTT: STTModel = .qwen3Asr   // Qwen3-ASR-0.6B default
 
     private var tts: any TTSEngine?
     private var stt: any STTEngine?
