@@ -3,6 +3,11 @@ llmfit_bridge.py — Hardware-aware model selector for GodLocal
 Integrates AlexsJones/llmfit: 157 models, 30 providers, 1 command.
 https://github.com/AlexsJones/llmfit
 
+Models:
+    Standard: LFM2-24B-A2B (≥12GB), paro4b (≥8GB), qwen3:8b, phi3:mini
+    Interpretable: steerling-8b (GuideLabsAI) — traces every token to context/training/concepts
+                   Use via: get_connector("steerling")().run_tool("steerling_complete", {...})
+
 Usage:
     from core.llmfit_bridge import detect_best_backend, get_model_recommendations
     backend = detect_best_backend()          # "mlx" | "ollama" | "cpu"
@@ -92,9 +97,9 @@ def _detect_hardware_fallback() -> HardwareProfile:
 
     # Model recommendations by RAM
     if profile.ram_gb >= 12:
-        profile.recommended_models = ["LFM2-24B-A2B", "qwen3:8b", "llama3.1:8b"]
+        profile.recommended_models = ["LFM2-24B-A2B", "steerling-8b", "qwen3:8b", "llama3.1:8b"]
     elif profile.ram_gb >= 8:
-        profile.recommended_models = ["paro4b", "qwen3:4b", "phi3:mini"]
+        profile.recommended_models = ["steerling-8b", "paro4b", "qwen3:4b", "phi3:mini"]
     else:
         profile.recommended_models = ["phi3:mini", "tinyllama"]
 

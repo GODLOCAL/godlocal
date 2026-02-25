@@ -18,7 +18,7 @@ CONNECTORS = {
 
 # v7.0.0 — CONNECTOR_REGISTRY with lazy loading
 from .sparknet_connector     import SparkNetConnector, get_sparknet   # stdlib-only, safe to import
-from .solscan_free_connector import SolscanFreeConnector               # no API key needed
+from .solscan_free_connector import SolscanFreeConnector                # no API key needed
 
 CONNECTOR_REGISTRY: dict[str, tuple[str, str]] = {
     "manifold":     ("extensions.xzero.manifold_connector",     "ManifoldConnector"),
@@ -48,7 +48,7 @@ def get_connector(name: str):
     return getattr(importlib.import_module(module), cls)
 
 __all__ = [
-    "XZeroConnector",
+    "XZroConnector",
     "ManifoldConnector",
     "KalshiConnector",
     "HyperliquidConnector",
@@ -58,4 +58,5 @@ __all__ = [
     "get_sparknet",
     "get_connector",
     "CONNECTOR_REGISTRY",
+    "SteerlingConnector",
 ]
