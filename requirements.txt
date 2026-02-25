@@ -14,6 +14,11 @@ groq>=0.13.0             # Groq LPU cloud backend (~1000 tok/s)
 cerebras-cloud-sdk>=1.0.0  # Cerebras inference (~3000 tok/s, pip install cerebras-cloud-sdk)
 # mlx-lm>=0.12.0          # macOS Apple Silicon only — uncomment if using MLX
 
+# BitNet b1.58 2B — CPU-native 1.58-bit inference (0.4GB RAM, 40% faster)
+# Install: pip install llama-cpp-python
+# Model:   huggingface-cli download microsoft/bitnet-b1.58-2B-4T --include '*.gguf' --local-dir models/
+llama-cpp-python>=0.2.0
+
 # Memory
 chromadb>=0.5.0
 

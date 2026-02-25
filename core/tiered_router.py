@@ -1,33 +1,44 @@
 """
 core/tiered_router.py
-TieredRouter — 4-tier cost routing for GodLocal LLM calls.
+TieredRouter — 5-tier cost routing for GodLocal LLM calls.
 
-Claude-Flow pattern: WASM (Python) → fast model → full model → GIANT (AirLLM 70B)
-When GROQ_API_KEY is set, FAST/FULL tiers use Groq LPU (~500 tok/s) and fall
-back to local Ollama only on Groq failure.  ~75-80% token savings on micro-tasks.
+Claude-Flow pattern: WASM → MICRO → FAST → FULL → GIANT
+
+Tier 0 WASM:   Pure Python regex/JSON, 0 tokens, <0.1ms
+Tier 1 MICRO:  BitNet b1.58 2B CPU-native, 0.4GB RAM, 40% faster than LLaMA
+               Best for: classify, sentiment, yes/no, signal tags (short prompts)
+Tier 2 FAST:   Taalas→Cerebras→Groq→Ollama (~1k-17k tok/s cloud)
+Tier 3 FULL:   ClaudeCodeLocal→Cerebras→Groq→Ollama (baseline)
+Tier 4 GIANT:  AirLLM 70B layer-by-layer on 4-8GB VRAM
+
+~75-80% token savings on micro-tasks vs full model.
 
 Usage:
     from core.tiered_router import TieredRouter, get_tiered_router
     router = get_tiered_router()
     result = await router.complete(prompt, task_type="format")    # WASM tier
-    result = await router.complete(prompt, task_type="classify")  # FAST (Groq/Ollama)
-    result = await router.complete(prompt, task_type="codegen")   # full tier
+    result = await router.complete(prompt, task_type="classify")  # MICRO/FAST
+    result = await router.complete(prompt, task_type="codegen")   # FULL tier
 """
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
+logger = logging.getLogger(__name__)
+
 
 class Tier(Enum):
     WASM  = 0   # Pure Python, 0 tokens
-    FAST  = 1   # Lightweight Ollama model (~60% token saving)
-    FULL  = 2   # Full Brain model (baseline)
-    GIANT = 3   # AirLLM layer-by-layer 70B+ on 4GB VRAM
+    MICRO = 1   # BitNet b1.58 2B — CPU, 0.4GB, 40% faster
+    FAST  = 2   # Cloud LPU: Taalas/Cerebras/Groq (~60% token saving)
+    FULL  = 3   # Full Brain model (baseline)
+    GIANT = 4   # AirLLM layer-by-layer 70B+ on 4GB VRAM
 
 
 WASM_TASK_TYPES = {
@@ -35,9 +46,15 @@ WASM_TASK_TYPES = {
     "bool_check", "json_extract", "url_check", "trim", "count"
 }
 
+# MICRO tier: tasks where BitNet b1.58 2B is sufficient
+# Short prompt, binary/categorical output, speed > quality
+MICRO_TASK_TYPES = {
+    "classify", "sentiment", "yes_no", "single_label",
+    "signal", "tag_infer", "micro"
+}
+
 FAST_TASK_TYPES = {
-    "classify", "summarize_short", "sentiment", "tag_infer",
-    "translate_short", "yes_no", "single_label"
+    "summarize_short", "translate_short",
 }
 
 FULL_TASK_TYPES = {
@@ -55,6 +72,7 @@ KNOWN_TAGS = [
     "sol", "btc", "eth", "usdc", "x100", "price", "signal", "whale",
     "trade", "swap", "dca", "bullish", "bearish", "goal", "patch",
     "autogenesis", "heartbeat", "error", "deploy", "roblox", "mobile",
+    "bitnet", "micro",
 ]
 
 
@@ -105,37 +123,42 @@ class WASMHandlers:
 @dataclass
 class TierStats:
     wasm_calls:    int = 0
+    micro_calls:   int = 0           # BitNet b1.58 2B tier
     fast_calls:    int = 0
     full_calls:    int = 0
-    giant_calls:   int = 0           # AirLLM 70B tier (added today)
+    giant_calls:   int = 0           # AirLLM 70B tier
     wasm_saved_tokens: int = 0
     fast_saved_tokens: int = 0
-    sparknet_reports: int = 0        # savings milestone reports emitted
+    sparknet_reports: int = 0
 
     @property
     def total_calls(self) -> int:
-        return self.wasm_calls + self.fast_calls + self.full_calls + self.giant_calls
+        return self.wasm_calls + self.micro_calls + self.fast_calls + self.full_calls + self.giant_calls
 
     @property
     def savings_pct(self) -> float:
         if self.total_calls == 0:
             return 0.0
         wasm_pct  = self.wasm_calls  / self.total_calls
+        micro_pct = self.micro_calls / self.total_calls
         fast_pct  = self.fast_calls  / self.total_calls
-        # WASM=100% savings, FAST=60%, FULL/GIANT=0%
-        return wasm_pct * 1.0 + fast_pct * 0.6
+        # WASM=100% savings, MICRO=80% (local CPU, no cloud cost), FAST=60%, FULL/GIANT=0%
+        return wasm_pct * 1.0 + micro_pct * 0.8 + fast_pct * 0.6
 
 
 class TieredRouter:
     """
-    3-tier cost router wrapping GodLocal Brain.
+    5-tier cost router wrapping GodLocal Brain.
 
-    Tier 0 (WASM):  pure Python regex/JSON handlers, 0 tokens, <0.1ms
-    Tier 1 (FAST):  lightweight model (qwen3:1.7b), ~60% token saving
-    Tier 2 (FULL):  full Brain model, baseline
+    Tier 0 (WASM):   pure Python regex/JSON handlers, 0 tokens, <0.1ms
+    Tier 1 (MICRO):  BitNet b1.58 2B — 0.4GB, CPU-native, 40% faster tokens
+                     Best for classify/sentiment/signal — short categorical outputs
+    Tier 2 (FAST):   cloud LPU (Taalas→Cerebras→Groq→Ollama), ~60% saving
+    Tier 3 (FULL):   full Brain model (ClaudeCode→Cerebras→Groq→Ollama)
+    Tier 4 (GIANT):  AirLLM 70B layer-by-layer, very long prompts
 
     Auto-classifies by task_type or prompt length.
-    Falls back gracefully — if fast model unavailable, uses full.
+    Falls back gracefully across tiers.
     """
 
     def __init__(self) -> None:
@@ -163,6 +186,8 @@ class TieredRouter:
         if task_type:
             if task_type in WASM_TASK_TYPES:
                 return Tier.WASM
+            if task_type in MICRO_TASK_TYPES:
+                return Tier.MICRO
             if task_type in FAST_TASK_TYPES:
                 return Tier.FAST
             if task_type in FULL_TASK_TYPES:
@@ -172,10 +197,12 @@ class TieredRouter:
         approx = self.wasm.count_tokens_approx(prompt)
         if approx < 50:
             return Tier.WASM
+        if approx < 100:
+            return Tier.MICRO   # Short prompt → BitNet 2B CPU
         if approx < 300:
             return Tier.FAST
         if approx > 2000:
-            return Tier.GIANT   # Very long prompt → AirLLM 70B
+            return Tier.GIANT   # Very long → AirLLM 70B
         return Tier.FULL
 
     async def complete(
@@ -197,77 +224,96 @@ class TieredRouter:
             tags = self.wasm.extract_tags(prompt)
             return json.dumps(tags) if tags else prompt[:200]
 
+        elif tier == Tier.MICRO:
+            self.stats.micro_calls += 1
+            # BitNet b1.58 2B: CPU-native, 0.4GB, ~40% faster than LLaMA
+            # Falls back to FAST tier if model not available
+            from core.bitnet_bridge import BITNET_AVAILABLE, get_bitnet
+            if BITNET_AVAILABLE:
+                try:
+                    _ttype = task_type or "classify"
+                    # Cap tokens for MICRO — binary/categorical outputs only
+                    micro_max = min(max_tokens, 128)
+                    return await get_bitnet().complete(prompt, task_type=_ttype, max_tokens=micro_max)
+                except Exception as e:
+                    logger.warning("BitNet MICRO failed (%s) — falling back to FAST", e)
+            # Fallback: FAST tier
+            return await self._fast_complete(prompt, task_type or "classify", max_tokens)
+
         elif tier == Tier.FAST:
             self.stats.fast_calls += 1
-            self.stats.fast_saved_tokens += int(self.wasm.count_tokens_approx(prompt) * 0.6)
-            # Speed chain: Taalas HC1 (~17k tok/s) → Cerebras (~3k tok/s) → Groq (~1k tok/s) → Ollama
-            _ttype = task_type or "classify"
-
-            from core.taalas_bridge import TAALAS_AVAILABLE, get_taalas
-            if TAALAS_AVAILABLE:
-                try:
-                    return await get_taalas().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
-                except Exception:
-                    logger.warning("Taalas FAST failed — falling back to Cerebras/Groq")
-
-            from core.cerebras_bridge import CEREBRAS_AVAILABLE, get_cerebras
-            if CEREBRAS_AVAILABLE:
-                try:
-                    return await get_cerebras().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
-                except Exception:
-                    logger.warning("Cerebras FAST failed — falling back to Groq")
-
-            from core.groq_connector import GROQ_AVAILABLE, get_groq
-            if GROQ_AVAILABLE:
-                try:
-                    return await get_groq().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
-                except Exception:
-                    logger.warning("Groq FAST failed — falling back to Ollama")
-
-            brain = self._get_fast_brain()
-            return await brain.async_complete(prompt, max_tokens=max_tokens)
+            return await self._fast_complete(prompt, task_type or "classify", max_tokens)
 
         elif tier == Tier.GIANT:
-            # AirLLM: 70B layer-by-layer on 4-8GB VRAM. pip install airllm on VPS.
+            # AirLLM: 70B layer-by-layer on 4-8GB VRAM
             from core.airllm_bridge import get_airllm
             return await get_airllm().complete(prompt, max_new_tokens=max_tokens)
 
-        else:
+        else:  # FULL
             self.stats.full_calls += 1
-            # Speed chain for FULL: ClaudeCodeLocal (agentic, free) → Cerebras → Groq → Ollama
-            _ttype = task_type or "analyze"
+            return await self._full_complete(prompt, task_type or "analyze", max_tokens)
 
-            # For agentic coding tasks: use Claude Code CLI → local Ollama (zero cost)
-            if _ttype == "codegen":
-                from core.claude_code_bridge import ClaudeCodeBridge, is_available as claude_available
-                if claude_available():
-                    try:
-                        return await ClaudeCodeBridge().run_task(prompt, timeout=90)
-                    except Exception:
-                        logger.warning("ClaudeCode local failed — falling back to Cerebras/Groq")
+    async def _fast_complete(self, prompt: str, task_type: str, max_tokens: int) -> str:
+        """FAST tier: Taalas → Cerebras → Groq → Ollama."""
+        self.stats.fast_saved_tokens += int(self.wasm.count_tokens_approx(prompt) * 0.6)
 
-            from core.cerebras_bridge import CEREBRAS_AVAILABLE, get_cerebras
-            if CEREBRAS_AVAILABLE:
+        from core.taalas_bridge import TAALAS_AVAILABLE, get_taalas
+        if TAALAS_AVAILABLE:
+            try:
+                return await get_taalas().complete(prompt, task_type=task_type, max_tokens=max_tokens)
+            except Exception:
+                logger.warning("Taalas FAST failed — falling back to Cerebras/Groq")
+
+        from core.cerebras_bridge import CEREBRAS_AVAILABLE, get_cerebras
+        if CEREBRAS_AVAILABLE:
+            try:
+                return await get_cerebras().complete(prompt, task_type=task_type, max_tokens=max_tokens)
+            except Exception:
+                logger.warning("Cerebras FAST failed — falling back to Groq")
+
+        from core.groq_connector import GROQ_AVAILABLE, get_groq
+        if GROQ_AVAILABLE:
+            try:
+                return await get_groq().complete(prompt, task_type=task_type, max_tokens=max_tokens)
+            except Exception:
+                logger.warning("Groq FAST failed — falling back to Ollama")
+
+        brain = self._get_fast_brain()
+        return await brain.async_complete(prompt, max_tokens=max_tokens)
+
+    async def _full_complete(self, prompt: str, task_type: str, max_tokens: int) -> str:
+        """FULL tier: ClaudeCode (codegen) → Cerebras → Groq → Ollama."""
+        if task_type == "codegen":
+            from core.claude_code_bridge import ClaudeCodeBridge, is_available as claude_available
+            if claude_available():
                 try:
-                    return await get_cerebras().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
+                    return await ClaudeCodeBridge().run_task(prompt, timeout=90)
                 except Exception:
-                    logger.warning("Cerebras FULL failed — falling back to Groq")
+                    logger.warning("ClaudeCode local failed — falling back to Cerebras/Groq")
 
-            from core.groq_connector import GROQ_AVAILABLE, get_groq
-            if GROQ_AVAILABLE:
-                try:
-                    return await get_groq().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
-                except Exception:
-                    logger.warning("Groq FULL failed — falling back to Ollama")
+        from core.cerebras_bridge import CEREBRAS_AVAILABLE, get_cerebras
+        if CEREBRAS_AVAILABLE:
+            try:
+                return await get_cerebras().complete(prompt, task_type=task_type, max_tokens=max_tokens)
+            except Exception:
+                logger.warning("Cerebras FULL failed — falling back to Groq")
 
-            brain = self._get_brain()
-            return await brain.async_complete(prompt, max_tokens=max_tokens)
+        from core.groq_connector import GROQ_AVAILABLE, get_groq
+        if GROQ_AVAILABLE:
+            try:
+                return await get_groq().complete(prompt, task_type=task_type, max_tokens=max_tokens)
+            except Exception:
+                logger.warning("Groq FULL failed — falling back to Ollama")
+
+        brain = self._get_brain()
+        return await brain.async_complete(prompt, max_tokens=max_tokens)
 
     def log_stats(self) -> str:
         s = self.stats
         line = (
             f"TieredRouter: {s.total_calls} calls | "
-            f"WASM={s.wasm_calls} FAST={s.fast_calls} FULL={s.full_calls} GIANT={s.giant_calls} | "
+            f"WASM={s.wasm_calls} MICRO={s.micro_calls} FAST={s.fast_calls} "
+            f"FULL={s.full_calls} GIANT={s.giant_calls} | "
             f"Est. savings={s.savings_pct:.0%} | "
             f"WASM tokens saved={s.wasm_saved_tokens:,}"
         )
@@ -277,9 +323,12 @@ class TieredRouter:
                 from extensions.xzero.sparknet_connector import get_sparknet
                 import asyncio
                 sparknet = get_sparknet()
-                summary = f"TieredRouter {s.savings_pct:.0%} savings ({s.total_calls} calls, WASM={s.wasm_calls})"
+                summary = (
+                    f"TieredRouter {s.savings_pct:.0%} savings "
+                    f"({s.total_calls} calls, WASM={s.wasm_calls}, MICRO={s.micro_calls})"
+                )
                 asyncio.ensure_future(
-                    sparknet.capture("tiered_router", summary[:200], tags=["tiered", "savings", "routing"])
+                    sparknet.capture("tiered_router", summary[:200], tags=["tiered", "savings", "bitnet"])
                 )
                 s.sparknet_reports += 1
             except Exception:
