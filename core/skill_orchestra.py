@@ -199,7 +199,56 @@ class SkillHandbook:
         return {"pruned": pruned, "kept": kept}
 
 
-# ── Router ───────────────────────────────────────────────────────────────────
+
+# ─── Q-Learning MoE layer (Claude-Flow pattern) ──────────────────────────────
+
+
+class QLearningLayer:
+    """
+    Q-Learning over (agent_id, skill_id) pairs.
+    Sits on top of Wilson CI scoring in SkillOrchestraRouter.
+
+    8 skill modes (monitor/trade/analyze/generate/fetch/alert/code/generic).
+    Each maintains a Q-table entry {agent:skill → Q_value}.
+
+    Update: Q(s,a) ← Q + α*(r + γ*maxQ(s') - Q)
+      r = 1.0 success | -0.5 failure | 0.0 neutral
+      γ = 0.9 (discount), α = 0.1 (learning rate)
+    """
+
+    def __init__(self, alpha: float = 0.1, gamma: float = 0.9, q_path: str = "core/q_table.json"):
+        self.alpha = alpha
+        self.gamma = gamma
+        self.q_path = Path(q_path)
+        self._table: dict[str, float] = {}
+        self._load()
+
+    def _key(self, agent_id: str, skill_id: str) -> str:
+        return f"{agent_id}:{skill_id}"
+
+    def q_value(self, agent_id: str, skill_id: str) -> float:
+        """Get Q-value. Default 0.5 = neutral prior."""
+        return self._table.get(self._key(agent_id, skill_id), 0.5)
+
+    def update(self, agent_id: str, skill_id: str, reward: float) -> None:
+        """Bellman update."""
+        key = self._key(agent_id, skill_id)
+        q = self._table.get(key, 0.5)
+        agent_qs = [v for k, v in self._table.items() if k.startswith(f"{agent_id}:")]
+        q_next = max(agent_qs) if agent_qs else 0.5
+        q_new = q + self.alpha * (reward + self.gamma * q_next - q)
+        self._table[key] = max(0.0, min(1.0, q_new))
+
+    def save(self) -> None:
+        self.q_path.parent.mkdir(parents=True, exist_ok=True)
+        self.q_path.write_text(json.dumps(self._table, indent=2))
+
+    def _load(self) -> None:
+        if self.q_path.exists():
+            try:
+                self._table = json.loads(self.q_path.read_text())
+            except Exception:
+                self._table = {}
 
 class SkillOrchestraRouter:
     """
@@ -207,7 +256,7 @@ class SkillOrchestraRouter:
 
     Replaces round-robin with:
     1. Infer required skills from query
-    2. Score each agent by skill-conditioned success probability (Wilson CI)
+    2. Score each agent: Wilson CI * 0.6 + Q-value * 0.4
     3. Apply cost penalty (budget_weight)
     4. Return best agent
 
@@ -222,14 +271,17 @@ class SkillOrchestraRouter:
         self,
         agents: list | None = None,
         handbook: SkillHandbook | None = None,
-        budget_weight: float = 0.1,    # Cost penalty weight (0 = ignore cost)
-        epsilon: float = 0.05,         # ε-greedy exploration rate
+        budget_weight: float = 0.1,     # Cost penalty weight (0 = ignore cost)
+        epsilon: float = 0.05,          # ε-greedy exploration rate
+        q_weight: float = 0.4,          # Q-Learning weight in combined score
     ):
         self.agents = agents or []
         self.handbook = handbook or SkillHandbook.load()
         self.budget_weight = budget_weight
         self.epsilon = epsilon
         self._last_query_skills: list[str] = []
+        self._q = QLearningLayer()      # Q-Learning MoE layer (NEW)
+        self._q_weight = q_weight       # NEW
 
     def route(
         self,
@@ -239,7 +291,7 @@ class SkillOrchestraRouter:
     ) -> object | None:
         """
         Select best agent for query.
-        Returns agent object or None if pool is empty.
+        Score = Wilson CI * (1 - q_weight) + Q-value * q_weight - cost_penalty
         """
         if not self.agents:
             return None
@@ -258,7 +310,7 @@ class SkillOrchestraRouter:
         self._last_query_skills = skill_ids
 
         if not skill_ids:
-            return candidates[0]   # No skill match → first available (safest default)
+            return candidates[0]    # No skill match → first available (safest default)
 
         # Score each agent
         best_agent = None
@@ -266,19 +318,27 @@ class SkillOrchestraRouter:
 
         for agent in candidates:
             aid = getattr(agent, "id", str(agent))
-            # Weighted avg of skill-conditioned Wilson CI scores
-            scores = [
+
+            # Wilson CI component
+            wilson_scores = [
                 self.handbook.profile(aid, sid).confidence
-                for sid in skill_ids[:3]   # top-3 most relevant skills
+                for sid in skill_ids[:3]
             ]
-            skill_score = sum(scores) / max(len(scores), 1)
+            wilson_score = sum(wilson_scores) / max(len(wilson_scores), 1)
+
+            # Q-Learning component (NEW)
+            q_scores = [self._q.q_value(aid, sid) for sid in skill_ids[:3]]
+            q_score = sum(q_scores) / max(len(q_scores), 1)
+
+            # Combined skill score
+            skill_score = wilson_score * (1.0 - self._q_weight) + q_score * self._q_weight
 
             # Cost penalty
             avg_cost = sum(
                 self.handbook.profile(aid, sid).cost_tokens
                 for sid in skill_ids[:3]
             ) / max(len(skill_ids[:3]), 1)
-            cost_penalty = self.budget_weight * (avg_cost / 10_000)  # normalise to 10K tokens
+            cost_penalty = self.budget_weight * (avg_cost / 10_000)
 
             total = skill_score - cost_penalty
             if total > best_score:
@@ -294,10 +354,22 @@ class SkillOrchestraRouter:
         success: bool,
         tokens: float = 0.0,
     ) -> None:
-        """Record execution result. Updates Beta distributions in handbook."""
+        """Record execution result. Updates Beta distributions AND Q-table (NEW)."""
         skill_ids = self._last_query_skills or self.handbook.infer_skills(query)
         for sid in skill_ids[:3]:
             self.handbook.record(agent_id, sid, success, tokens)
 
+        # Q-Learning update (NEW)
+        reward = 1.0 if success else -0.5
+        for sid in skill_ids[:3]:
+            self._q.update(agent_id, sid, reward=reward)
+
+        # Efficiency bonus: cheap successful task
+        if tokens < 500 and success:
+            for sid in skill_ids[:3]:
+                self._q.update(agent_id, sid, reward=0.1)
+
     def save(self) -> None:
+        """Persist handbook and Q-table (NEW)."""
         self.handbook.save()
+        self._q.save()

@@ -64,6 +64,7 @@ class Spark:
     relevance_decay: float      = 1.0   # drops by 0.1/hr, floored at 0.1
     context_hash:  str          = ""    # hash of capture context (dedup)
     linked_sparks: list[str]    = field(default_factory=list)  # SparkNet edges
+    success_score:    float         = 0.5    # ReasoningBank: EMA of outcome (0=fail, 1=success)
 
     @classmethod
     def create(cls, source_agent: str, content: str, tags: list[str], context: str = "") -> "Spark":
@@ -160,6 +161,12 @@ class SparkStore:
         self._conn.execute(
             "UPDATE sparks SET access_count = access_count + 1 WHERE id=?", (spark_id,)
         )
+        self._conn.commit()
+
+
+    def delete_spark(self, spark_id: str) -> None:
+        """Remove a spark (used by consolidate to delete merged duplicates)."""
+        self._conn.execute("DELETE FROM sparks WHERE id=?", (spark_id,))
         self._conn.commit()
 
     def _row_to_spark(self, row) -> Spark:
@@ -320,6 +327,91 @@ Return ONLY the JSON array."""
                 spark.relevance_decay = min(1.0, spark.relevance_decay + 0.2)
         await asyncio.to_thread(self._store.upsert, spark)
 
+    # ── ReasoningBank pipeline (Claude-Flow) ────────────────────────────────
+
+    async def judge(self, spark_id: str, outcome: bool) -> None:
+        """
+        JUDGE step: update spark.success_score via EMA.
+        Call from post_action_capture() after action completes.
+        new_score = 0.7 * old_score + 0.3 * outcome
+        """
+        all_sparks = await asyncio.to_thread(self._store.load_all)
+        spark = next((s for s in all_sparks if s.id == spark_id), None)
+        if spark is None:
+            return
+        old = getattr(spark, "success_score", 0.5)
+        spark.success_score = 0.7 * old + 0.3 * (1.0 if outcome else 0.0)  # type: ignore
+        if outcome:
+            spark.relevance_decay = min(1.0, spark.relevance_decay + 0.15)
+        else:
+            spark.relevance_decay = max(0.1, spark.relevance_decay - 0.1)
+        await asyncio.to_thread(self._store.upsert, spark)
+
+    async def consolidate(self, min_success_score: float = 0.7, overlap_threshold: float = 0.8) -> int:
+        """
+        CONSOLIDATE step: merge high-score duplicate sparks.
+        Merges pairs where tag overlap >= overlap_threshold AND both score >= min_success_score.
+        Returns number of sparks consolidated.
+        """
+        all_sparks = await asyncio.to_thread(self._store.load_all)
+        high = [s for s in all_sparks if getattr(s, "success_score", 0.5) >= min_success_score]
+        merged: set[str] = set()
+
+        for i, s1 in enumerate(high):
+            if s1.id in merged:
+                continue
+            for s2 in high[i + 1:]:
+                if s2.id in merged or s1.id == s2.id:
+                    continue
+                union = set(s1.tags) | set(s2.tags)
+                inter = set(s1.tags) & set(s2.tags)
+                if not union:
+                    continue
+                if len(inter) / len(union) >= overlap_threshold:
+                    # Merge s2 into s1
+                    s1.tags = list(set(s1.tags) | set(s2.tags))
+                    if len(s2.content) > len(s1.content):
+                        s1.content = s2.content[:200]
+                    s1.success_score = max(  # type: ignore
+                        getattr(s1, "success_score", 0.5),
+                        getattr(s2, "success_score", 0.5),
+                    )
+                    s1.access_count += s2.access_count
+                    s1.linked_sparks = list(set(s1.linked_sparks + [s2.id]))
+                    await asyncio.to_thread(self._store.upsert, s1)
+                    merged.add(s2.id)
+
+        for sid in merged:
+            await asyncio.to_thread(self._store.delete_spark, sid)
+        return len(merged)
+
+    async def reasoning_bank_cycle(
+        self,
+        agent: str,
+        raw_logs: list[str],
+        outcomes: list[bool] | None = None,
+    ) -> dict:
+        """
+        Full RETRIEVE → JUDGE → DISTILL → CONSOLIDATE cycle.
+        Call from sleep_cycle() Phase 4 instead of bare distill().
+        Returns: {"distilled": N, "judged": N, "consolidated": N}
+        """
+        # RETRIEVE context
+        existing = await self.evoke(agent, context=" ".join(raw_logs[-5:]))
+        # DISTILL
+        new_sparks = await self.distill(agent, raw_logs)
+        # JUDGE
+        judged = 0
+        if outcomes:
+            for i, spark in enumerate(new_sparks):
+                if i < len(outcomes):
+                    await self.judge(spark.id, outcomes[i])
+                    judged += 1
+        # CONSOLIDATE
+        consolidated = await self.consolidate()
+        return {"distilled": len(new_sparks), "judged": judged, "consolidated": consolidated, "context": len(existing)}
+
+
     async def subscribe(self, agent: str, tags: list[str]):
         """Agent subscribes to specific tag streams (like a Kafka consumer group)."""
         self._subscribers[agent] = list(set(self._subscribers.get(agent, []) + tags))
@@ -389,15 +481,17 @@ Return ONLY the JSON array."""
 ========================
 "
 
-    async def post_action_capture(self, agent: str, action: str, result: str):
+    async def post_action_capture(self, agent: str, action: str, result: str, success: bool = True):
         """
         Called after an agent completes an action.
-        Auto-distils into a spark if result is significant.
+        Auto-distils into a spark + calls judge() for ReasoningBank scoring.
         """
         content  = f"{action[:80]} → {result[:100]}"
         tags     = self._extract_tags(action + " " + result)
         tags    += ["outcome", agent]
-        await self.capture(agent, content, tags, context=action)
+        spark = await self.capture(agent, content, tags, context=action)
+        await self.judge(spark.id, outcome=success)
+        return spark
 
 
 # ── Module-level singleton (shared across GodLocal) ──────────────────────────
