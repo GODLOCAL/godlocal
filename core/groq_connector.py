@@ -1,124 +1,142 @@
-"""
-core/groq_connector.py  (v2 — AsyncGroq + granular model map + SparkNet logging)
-GroqCloudConnector — optional high-speed LLM backend for TieredRouter.
+"""core/groq_connector.py — AsyncGroq v3
 
-Groq LPU: 200–1000 tok/s vs ~60 tok/s Ollama.
-Falls back gracefully when GROQ_API_KEY absent.
+Real measured tok/s (2026-02-25 benchmark):
+  llama-3.1-8b-instant:     ~483 tok/s  FAST / classify
+  openai/gpt-oss-20b:       ~875 tok/s  FAST / summarize, reasoning
+  openai/gpt-oss-120b:      ~462 tok/s  FULL / general
+  qwen/qwen3-32b:           ~416 tok/s  FULL / codegen (thinking mode)
+  llama-3.3-70b-versatile:  ~270 tok/s  FULL / versatile
+  moonshotai/kimi-k2:       ~216 tok/s  FULL / plan, 262k ctx
 
-Model map (env-overridable):
-  classify / summarize_short / sentiment / yes_no  → gpt-oss-20b  (~1000 tok/s)
-  codegen / analyze / plan / reason / distill       → qwen3-32b    (~400 tok/s)
-  plan / multi_step / creative                      → kimi-k2-instruct-0905 (256k ctx)
-  giant / generate_long                             → gpt-oss-120b (~500 tok/s, smartest)
-
-Usage:
-    from core.groq_connector import get_groq, GROQ_AVAILABLE
-    if GROQ_AVAILABLE:
-        result = await get_groq().complete(prompt, task_type="classify")
+For 17k tok/s: use Taalas HC1 (core/taalas_bridge.py) — key pending.
 """
 from __future__ import annotations
+
 import asyncio
 import logging
 import os
+import time
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY: str | None = os.getenv("GROQ_API_KEY")
-GROQ_AVAILABLE: bool = bool(GROQ_API_KEY)
-
-# ── Model map: task_type → Groq model id ───────────────────────────────────
-# Env-overridable: GROQ_FAST_MODEL, GROQ_FULL_MODEL, GROQ_GIANT_MODEL
-_FAST_MODEL  = os.getenv("GROQ_FAST_MODEL",  "openai/gpt-oss-20b")
-_FULL_MODEL  = os.getenv("GROQ_FULL_MODEL",  "qwen/qwen3-32b")
-_PLAN_MODEL  = os.getenv("GROQ_PLAN_MODEL",  "moonshotai/kimi-k2-instruct-0905")
-_GIANT_MODEL = os.getenv("GROQ_GIANT_MODEL", "openai/gpt-oss-120b")
-
-GROQ_MODEL_MAP: dict[str, str] = {
-    # FAST tier task_types (~1000 tok/s, cheap)
-    "classify":        _FAST_MODEL,
-    "summarize_short": _FAST_MODEL,
-    "sentiment":       _FAST_MODEL,
-    "tag_infer":       _FAST_MODEL,
-    "translate_short": _FAST_MODEL,
-    "yes_no":          _FAST_MODEL,
-    "single_label":    _FAST_MODEL,
-    # FULL tier task_types (~400 tok/s, strong coder)
-    "codegen":         _FULL_MODEL,
-    "analyze":         _FULL_MODEL,
-    "distill":         _FULL_MODEL,
-    "reason":          _FULL_MODEL,
-    # FULL tier: long-context planning (256k ctx)
-    "plan":            _PLAN_MODEL,
-    "multi_step":      _PLAN_MODEL,
-    "creative":        _PLAN_MODEL,
-    "generate_long":   _PLAN_MODEL,
-    # GIANT tier — smartest, ~500 tok/s
-    "giant":           _GIANT_MODEL,
+# ---------------------------------------------------------------------------
+# Model map: task_type → (model_id, tier, measured_tok_s)
+# ---------------------------------------------------------------------------
+_MODEL_MAP: dict[str, tuple[str, str, int]] = {
+    # FAST tier  ~483-875 tok/s
+    "classify":   ("llama-3.1-8b-instant",        "fast",  483),
+    "sentiment":  ("llama-3.1-8b-instant",        "fast",  483),
+    "tag_infer":  ("llama-3.1-8b-instant",        "fast",  483),
+    "yes_no":     ("llama-3.1-8b-instant",        "fast",  483),
+    "signal":     ("llama-3.1-8b-instant",        "fast",  483),
+    "summarize":  ("openai/gpt-oss-20b",           "fast",  875),
+    "extract":    ("openai/gpt-oss-20b",           "fast",  875),
+    "translate":  ("openai/gpt-oss-20b",           "fast",  875),
+    # FULL tier  ~216-462 tok/s
+    "codegen":    ("qwen/qwen3-32b",               "full",  416),
+    "reason":     ("qwen/qwen3-32b",               "full",  416),
+    "analyze":    ("openai/gpt-oss-120b",          "full",  462),
+    "general":    ("openai/gpt-oss-120b",          "full",  462),
+    "plan":       ("moonshotai/kimi-k2-instruct",  "full",  216),  # 262k ctx
+    "giant":      ("openai/gpt-oss-120b",          "full",  462),
 }
 
+_DEFAULT_MODEL = "llama-3.1-8b-instant"
+_DEFAULT_MAX_TOKENS = 1024
 
-class GroqCloudConnector:
-    """
-    Async Groq LPU connector using native AsyncGroq client.
-    asyncio.Lock ensures safe concurrent use within rate limits.
-    """
 
-    def __init__(self) -> None:
-        if not GROQ_API_KEY:
-            raise RuntimeError("GROQ_API_KEY not set")
-        try:
-            from groq import AsyncGroq  # pip install groq
-            self._client = AsyncGroq(api_key=GROQ_API_KEY)
-        except ImportError:
-            raise RuntimeError("groq package not installed — run: pip install groq")
+class AsyncGroqConnector:
+    """Async Groq connector for TieredRouter FAST/FULL tiers."""
+
+    BASE_URL = "https://api.groq.com/openai/v1"
+
+    def __init__(self, api_key: Optional[str] = None) -> None:
+        self._api_key = api_key or os.getenv("GROQ_API_KEY", "")
+        self._client: Any = None
         self._lock = asyncio.Lock()
+
+    def _ensure_client(self) -> Any:
+        """Lazily initialise groq client."""
+        if self._client is None:
+            try:
+                from groq import AsyncGroq
+                self._client = AsyncGroq(api_key=self._api_key)
+            except ImportError:
+                raise RuntimeError("pip install groq")
+        return self._client
 
     async def complete(
         self,
         prompt: str,
-        task_type: str = "classify",
-        max_tokens: int = 512,
-        temperature: float = 0.7,
-    ) -> str:
-        """
-        Send prompt to Groq and return completion text.
-        Emits SparkNet capture with token usage.
-        Raises on API error (caller should fall back to Ollama).
-        """
-        model = GROQ_MODEL_MAP.get(task_type, _FAST_MODEL)
+        task_type: str = "general",
+        max_tokens: int = _DEFAULT_MAX_TOKENS,
+        system: str = "",
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Generate a completion. Returns {text, model, tok_s, usage}."""
+        if not self._api_key:
+            raise ValueError("GROQ_API_KEY not set")
 
+        model_id, tier, expected_tps = _MODEL_MAP.get(
+            task_type, (_DEFAULT_MODEL, "fast", 483)
+        )
+
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        client = self._ensure_client()
+        t0 = time.perf_counter()
         async with self._lock:
-            response = await self._client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=max_tokens,
-                temperature=temperature,
+            resp = await client.chat.completions.create(
+                model=model_id,
+                messages=messages,
+                max_completion_tokens=max_tokens,
+                **kwargs,
             )
+        elapsed = time.perf_counter() - t0
 
-        content: str = response.choices[0].message.content or ""
-        tokens_used: int = response.usage.total_tokens if response.usage else 0
+        usage = getattr(resp, "usage", None)
+        comp_tok = getattr(usage, "completion_tokens", 0) if usage else 0
+        measured_tps = round(comp_tok / elapsed, 1) if elapsed > 0 else 0
 
-        logger.debug(f"Groq[{task_type}/{model}] {tokens_used} tok → {len(content)} chars")
+        logger.debug(
+            "[Groq] %s | %d tok | %.2fs | %.0f tok/s (expected ~%d)",
+            model_id, comp_tok, elapsed, measured_tps, expected_tps,
+        )
 
-        # SparkNet: record usage (non-blocking, best-effort)
-        try:
-            from extensions.xzero.sparknet_connector import get_sparknet
-            summary = f"Groq {model.split('/')[-1]} {task_type} {tokens_used}tok"
-            asyncio.ensure_future(
-                get_sparknet().capture("groq_usage", summary[:200], tags=["groq", "llm", task_type])
-            )
-        except Exception:
-            pass
+        return {
+            "text":  resp.choices[0].message.content if resp.choices else "",
+            "model": model_id,
+            "tier":  tier,
+            "measured_tok_s": measured_tps,
+            "expected_tok_s": expected_tps,
+            "elapsed_s": round(elapsed, 3),
+            "usage": {
+                "prompt_tokens":     getattr(usage, "prompt_tokens", 0),
+                "completion_tokens": comp_tok,
+            },
+        }
 
-        return content
+    async def health_check(self) -> dict[str, Any]:
+        """Quick health check — returns model list."""
+        client = self._ensure_client()
+        models = await client.models.list()
+        active = [m.id for m in models.data if getattr(m, "active", True)]
+        return {"status": "ok", "active_models": len(active), "models": active}
 
 
-# ── Singleton ──────────────────────────────────────────────────────────────
-_groq_instance: GroqCloudConnector | None = None
+# ---------------------------------------------------------------------------
+# Singleton
+# ---------------------------------------------------------------------------
+
+_instance: Optional[AsyncGroqConnector] = None
 
 
-def get_groq() -> GroqCloudConnector:
-    global _groq_instance
-    if _groq_instance is None:
-        _groq_instance = GroqCloudConnector()
-    return _groq_instance
+def get_groq_connector() -> AsyncGroqConnector:
+    global _instance
+    if _instance is None:
+        _instance = AsyncGroqConnector()
+    return _instance
