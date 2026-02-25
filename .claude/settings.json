@@ -1,28 +1,41 @@
 {
-  "mcpServers": {
-    "paper": {
-      "type": "websocket",
-      "url": "${PAPER_MCP_URL:-ws://localhost:3333/mcp}",
-      "description": "Paper Desktop canvas — read/write HTML nodes via MCP"
-    },
-    "godlocal": {
-      "type": "http",
-      "url": "${GODLOCAL_BASE_URL:-http://localhost:8000}",
-      "description": "GodLocal v5 API — /connectors /evolve /status"
-    }
-  },
   "permissions": {
     "allow": [
-      "Bash(git *)",
-      "Bash(python *)",
-      "Bash(pytest *)",
-      "Bash(pip *)",
-      "Read(**)",
-      "Write(*.py)", "Write(*.md)", "Write(*.html)", "Write(*.json)", "Write(*.txt)"
+      "Bash(git*)",
+      "Bash(python*)",
+      "Bash(cargo*)",
+      "Bash(curl*)",
+      "Bash(ghostty*)",
+      "Bash(lazygit*)",
+      "Bash(yazi*)",
+      "Bash(npm*)",
+      "Bash(node*)"
     ],
-    "deny": [
-      "Bash(rm -rf *)",
-      "Bash(sudo *)"
+    "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {"type": "command", "command": "bash .claude/hooks/pre-tool-use.sh"}
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {"type": "command", "command": "bash .claude/hooks/post-tool-use.sh"}
+        ]
+      }
     ]
+  },
+  "worktree": {
+    "command": "bash .claude/hooks/worktree-godlocal.sh"
+  },
+  "env": {
+    "GODLOCAL_BASE_URL": "http://localhost:8000",
+    "CLAUDE_AGENT_ID": "autogenesis"
   }
 }
