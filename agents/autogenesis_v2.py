@@ -20,6 +20,14 @@ from typing import Any
 from core.brain import Brain
 from core.settings import settings
 
+# ── Potpie integration (optional — gracefully degraded when server is down) ──
+try:
+    from extensions.xzero import get_connector as _get_xzero_connector
+    _PotpieConnector = _get_xzero_connector("potpie")
+    _POTPIE_AVAILABLE = True
+except Exception:
+    _POTPIE_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 PLAN_PROMPT = """You are a senior Python architect. Analyze the task and output a JSON [PLAN].
@@ -253,16 +261,35 @@ class AutoGenesis:
                 "plan": plan,
             }
 
-        # Step 2: Select target files
+        # Step 2a: Potpie codebase intelligence (optional — skipped if server down)
+        potpie_context: str = ""
+        if _POTPIE_AVAILABLE:
+            try:
+                _pc = _PotpieConnector()
+                _health = await _pc.health_check()
+                if _health.get("status") == "ok":
+                    _q = f"What files and functions are relevant to this task: {task[:200]}"
+                    _ans = await _pc.query_agent(
+                        project_id="godlocal",
+                        question=_q,
+                        agent="qa",
+                    )
+                    potpie_context = _ans.get("content", "")
+                    if potpie_context:
+                        logger.info("[AutoGenesis] Potpie context: %.120s…", potpie_context)
+            except Exception as _e:
+                logger.debug("[AutoGenesis] Potpie unavailable: %s", _e)
+
+        # Step 2b: Select target files
         target_paths = self._resolve_targets(plan.get("target_files", []))
         if not target_paths:
-            return {"status": "no_targets", "plan": plan}
+            return {"status": "no_targets", "plan": plan, "potpie_context": potpie_context}
 
         results: list[dict] = []
         for file_path in target_paths[:3]:  # max 3 files per evolution
             content = file_path.read_text(encoding="utf-8")
             patch_result = await self._patch_file(
-                brain, task, plan, file_path, content, apply, max_revisions
+                brain, task, plan, file_path, content, apply, max_revisions, potpie_context
             )
             results.append(patch_result)
 
@@ -288,16 +315,21 @@ class AutoGenesis:
         content: str,
         apply: bool,
         max_revisions: int,
+        potpie_context: str = "",
     ) -> dict:
         revision = 0
         patches_applied = 0
 
         while revision < max_revisions:
+            _potpie_note = (
+                f"\n\n[Potpie codebase context]\n{potpie_context[:600]}"
+                if potpie_context else ""
+            )
             patch_text = await brain.think(
                 PATCH_PROMPT.format(
                     plan=json.dumps(plan, indent=2),
                     content=content[:6000],  # trim to avoid token overflow
-                    task=task,
+                    task=task + _potpie_note,
                 ),
                 max_tokens=1024,
             )
