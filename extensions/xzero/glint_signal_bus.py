@@ -330,6 +330,7 @@ class GlintSignalBus:
                 fetch_whale_signals(session, self._whale_key),
                 fetch_fresh_wallet_signals(session),
                 fetch_osint_twitter_signals(session, self._twitter_bearer),
+                fetch_apify_intelligence(),
                 return_exceptions=True,
             )
 
@@ -369,6 +370,49 @@ class GlintSignalBus:
         parts = [f"{src}={n}" for src, n in sorted(counts.items())]
         urgent = sum(1 for s in signals if s.urgency >= 0.7)
         return f"GlintSignalBus: {len(signals)} signals ({", ".join(parts)}) | urgent={urgent}"
+
+
+# ── Apify 5th intelligence source ─────────────────────────────────────────────
+
+async def fetch_apify_intelligence() -> list[GlintSignal]:
+    """
+    5th GlintSignalBus source: Apify RAG-web-browser for open-ended OSINT.
+    Searches crypto whale movements + Polymarket intelligence on every tick.
+    No-op (returns []) if APIFY_TOKEN not set.
+    """
+    from extensions.xzero.apify_mcp_connector import APIFY_AVAILABLE, get_apify
+    if not APIFY_AVAILABLE:
+        return []
+    try:
+        apify = get_apify()
+        queries = [
+            "crypto market whale movements urgent news today",
+            "polymarket prediction market high-value bets today",
+        ]
+        all_results = await asyncio.gather(
+            *[apify.rag_web_browser(q, max_results=3) for q in queries],
+            return_exceptions=True,
+        )
+        signals: list[GlintSignal] = []
+        for results in all_results:
+            if not isinstance(results, list):
+                continue
+            for item in results[:2]:
+                text = str(item.get("markdown", item.get("text", item.get("url", ""))))[:300]
+                if not text.strip():
+                    continue
+                signals.append(GlintSignal(
+                    source="apify_osint",
+                    signal_type="web_intelligence",
+                    content=text,
+                    urgency=0.5,
+                    tags=["apify", "web", "osint"],
+                ))
+        return signals
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(f"Apify intelligence fetch failed: {exc}")
+        return []
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────

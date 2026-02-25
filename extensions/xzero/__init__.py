@@ -34,6 +34,7 @@ CONNECTOR_REGISTRY: dict[str, tuple[str, str]] = {
     "sparknet":     ("extensions.xzero.sparknet_connector",     "SparkNetConnector"),
     "potpie":       ("extensions.xzero.potpie_connector",       "PotpieConnector"),
     "glint":        ("extensions.xzero.glint_signal_bus",         "GlintSignalBus"),       # GlintIntel multi-source signal aggregator
+    "apify":        ("extensions.xzero.apify_mcp_connector",     "ApifyMCPConnector"),    # 15k+ web scraping & OSINT actors
     "polymarket":   ("extensions.xzero.polymarket_connector",     "PolymarketConnector"),  # with closed-candle gating
 }
 
@@ -63,6 +64,7 @@ __all__ = [
     "SolscanFreeConnector",
     "get_sparknet",
     "get_connector",
+    "ApifyMCPConnector",
     "CONNECTOR_REGISTRY",
     "SteerlingConnector",
     "PotpieConnector",
