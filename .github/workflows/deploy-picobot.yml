@@ -1,0 +1,40 @@
+name: Deploy to Picobot
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.PICOBOT_HOST }}
+          username: ${{ secrets.PICOBOT_USER }}
+          password: ${{ secrets.PICOBOT_PASS }}
+          script: |
+            set -e
+            cd ~/godlocal 2>/dev/null || git clone https://github.com/GODLOCAL/godlocal ~/godlocal
+            cd ~/godlocal
+            git pull origin main
+            docker compose down --remove-orphans
+            docker compose build --no-cache
+            docker compose up -d
+            # Pull lightweight LLM if not present
+            docker compose exec -T ollama ollama pull qwen3:0.5b || true
+            echo "✅ GodLocal deployed at $(date)"
+
+      - name: Health Check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.PICOBOT_HOST }}
+          username: ${{ secrets.PICOBOT_USER }}
+          password: ${{ secrets.PICOBOT_PASS }}
+          script: |
+            sleep 10
+            curl -f http://localhost:8000/health && echo "✅ Backend healthy"
