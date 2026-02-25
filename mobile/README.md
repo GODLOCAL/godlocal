@@ -132,3 +132,29 @@ LFM2 24B is a Mixture-of-Experts model — only 2B parameters active per token, 
 4. Done. `AudioBridgeMLX.swift` auto-activates (stub `#else` branch disabled).
 
 > Without this package the file compiles fine in stub mode — LLM chat still works normally.
+
+---
+
+## Mobile-O — On-Device Unified Multimodal AI (Optional)
+
+`MobileOBridge.swift` integrates [arXiv:2602.20161](https://arxiv.org/abs/2602.20161) — the first unified model for both **image understanding** (VQA, OCR, captioning) and **text-to-image generation** running entirely on-device.
+
+| Capability | Model | Speed (iPhone 17 Pro) |
+|-----------|-------|----------------------|
+| **Understanding** (VQA/OCR/caption) | FastVLM-0.5B + MCP | TTFT 248ms |
+| **Generation** (text → 512×512) | SANA-600M-512 DiT | ~3s (20 steps) |
+
+**Stats**: 1.6B params total · <2GB RAM · 6–11× faster than Show-O / JanusFlow · CoreML + MLX
+
+**Install weights** (first launch):
+- iOS App Store: [id 6759238106](https://apps.apple.com/app/id6759238106)  
+- Or HuggingFace: `Mobile-O-0.5B` → place `.mlpackage` files in `Documents/MobileO/`
+
+**Usage in GodLocal** (combine with NexaView):
+```swift
+// Speak to PARO 4B → get text → generate image from response
+let answer = try await nexaBridge.generate(prompt: userQuery)
+let image  = try await mobileO.generate(prompt: answer)
+```
+
+> Source: [@HuggingPapers](https://x.com/HuggingPapers) · paper: "Unified Multimodal Understanding and Generation on Mobile Device"
