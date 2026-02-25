@@ -1,0 +1,48 @@
+name: Setup VPS Environment Variables
+
+on:
+  workflow_dispatch:
+    inputs:
+      GROQ_API_KEY:
+        description: 'GroqCloud API key (gsk_...)'
+        required: true
+        type: string
+
+jobs:
+  setup-env:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write env vars to VPS .env
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.PICOBOT_HOST }}
+          username: ${{ secrets.PICOBOT_USER }}
+          password: ${{ secrets.PICOBOT_PASS }}
+          script: |
+            set -e
+            cd ~/godlocal
+
+            # Write / update GROQ_API_KEY in .env (create if absent)
+            touch .env
+            # Remove existing entry if present, then append fresh value
+            grep -v '^GROQ_API_KEY=' .env > /tmp/.env.tmp || true
+            echo "GROQ_API_KEY=${{ inputs.GROQ_API_KEY }}" >> /tmp/.env.tmp
+            mv /tmp/.env.tmp .env
+            chmod 600 .env
+
+            echo "✅ GROQ_API_KEY written to ~/godlocal/.env"
+            echo "   Key preview: $(grep GROQ_API_KEY .env | cut -c1-25)..."
+
+      - name: Restart GodLocal with new env
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.PICOBOT_HOST }}
+          username: ${{ secrets.PICOBOT_USER }}
+          password: ${{ secrets.PICOBOT_PASS }}
+          script: |
+            set -e
+            cd ~/godlocal
+            docker compose down
+            docker compose up -d
+            sleep 8
+            curl -f http://localhost:8000/health && echo "✅ Backend restarted healthy" || echo "⚠️  Health check failed — check logs"
