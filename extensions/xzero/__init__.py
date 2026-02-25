@@ -33,6 +33,8 @@ CONNECTOR_REGISTRY: dict[str, tuple[str, str]] = {
     "delegation":   ("extensions.xzero.xzero_delegation",      "XZeroDelegation"),
     "sparknet":     ("extensions.xzero.sparknet_connector",     "SparkNetConnector"),
     "potpie":       ("extensions.xzero.potpie_connector",       "PotpieConnector"),
+    "glint":        ("extensions.xzero.glint_signal_bus",         "GlintSignalBus"),       # GlintIntel multi-source signal aggregator
+    "polymarket":   ("extensions.xzero.polymarket_connector",     "PolymarketConnector"),  # with closed-candle gating
 }
 
 def get_connector(name: str):
@@ -64,4 +66,8 @@ __all__ = [
     "CONNECTOR_REGISTRY",
     "SteerlingConnector",
     "PotpieConnector",
+    "GlintSignalBus",
+    "get_signal_bus",
+    "ClosedCandleGate",
+    "get_candle_gate",
 ]

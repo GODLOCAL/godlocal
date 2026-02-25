@@ -282,6 +282,81 @@ class PolymarketConnector:
         }
 
 
+
+# ── Closed-candle gating (GlintIntel pattern) ─────────────────────────────────
+
+from datetime import datetime, timezone
+import math
+
+
+class ClosedCandleGate:
+    """
+    GlintIntel insight: don't trade on an open candle — wait for confirmation.
+    "30 seconds from event to screen" but only trade after candle closes.
+
+    Gating policy options:
+      "closed_candle"  — wait until current 1-min candle closes before allowing trade
+      "open"           — no gating, trade immediately (old behaviour)
+
+    Usage:
+        gate = ClosedCandleGate(policy="closed_candle")
+        if gate.is_open():
+            result = connector.execute_trade(...)
+        else:
+            secs = gate.seconds_until_next()
+            await asyncio.sleep(secs)
+            result = connector.execute_trade(...)
+    """
+
+    CANDLE_SECONDS = 60   # 1-minute candle
+
+    def __init__(self, policy: str = "closed_candle"):
+        self.policy = policy
+        self._last_candle: int = 0   # last candle start epoch
+
+    def _current_candle(self) -> int:
+        """Returns the start epoch of the current 1-min candle."""
+        now = int(time.time())
+        return (now // self.CANDLE_SECONDS) * self.CANDLE_SECONDS
+
+    def is_open(self) -> bool:
+        """
+        Returns True if a trade is allowed NOW.
+        closed_candle policy: True only in the first 5s of a new candle
+        (i.e., previous candle just closed).
+        """
+        if self.policy != "closed_candle":
+            return True
+        candle_start = self._current_candle()
+        elapsed_in_candle = int(time.time()) - candle_start
+        # Allow in the first 5 seconds of each new candle
+        is_fresh = elapsed_in_candle <= 5
+        if is_fresh and candle_start != self._last_candle:
+            self._last_candle = candle_start
+            return True
+        return False
+
+    def seconds_until_next(self) -> float:
+        """Seconds until the next candle opens (i.e., next trade window)."""
+        candle_start = self._current_candle()
+        candle_end = candle_start + self.CANDLE_SECONDS
+        return max(0.0, candle_end - time.time())
+
+    async def wait_for_candle(self) -> None:
+        """Async wait until the next candle is open."""
+        import asyncio
+        wait = self.seconds_until_next()
+        if wait > 0:
+            await asyncio.sleep(wait)
+
+
+# Module-level gate — shared across all PolymarketConnector instances
+_default_gate = ClosedCandleGate(policy="closed_candle")
+
+def get_candle_gate() -> ClosedCandleGate:
+    return _default_gate
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # sleep_cycle() integration hook
 # Called from SleepCycle.run() in godlocal_v5.py Phase 3+
