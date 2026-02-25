@@ -515,11 +515,7 @@ Return ONLY the JSON array."""
         if not sparks:
             return ""
         lines = [f"[SPARK {i+1}] {s.content}" for i, s in enumerate(sparks)]
-        return "=== SparkNet Context ===
-" + "
-".join(lines) + "
-========================
-"
+        return "=== SparkNet Context ===\n" + "\n".join(lines) + "\n========================\n"
 
     async def post_action_capture(self, agent: str, action: str, result: str, success: bool = True):
         """

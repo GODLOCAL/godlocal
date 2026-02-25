@@ -137,8 +137,7 @@ class AirLLMBridge:
             import airllm   # noqa: F401
         except ImportError:
             raise ImportError(
-                "AirLLM not installed. Run: pip install airllm
-"
+                "AirLLM not installed. Run: pip install airllm\n"
                 "Then restart the GodLocal backend (godlocal_v5.py)."
             )
 

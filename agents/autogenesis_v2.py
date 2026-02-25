@@ -124,10 +124,7 @@ class CodeScanner:
 # ── SEARCH/REPLACE Patcher ────────────────────────────────────────────────
 class SearchReplacePatcher:
     PATCH_RE = re.compile(
-        r"<<<SEARCH
-(.*?)>>>
-<<<REPLACE
-(.*?)>>>",
+        r"<<<SEARCH\n(.*?)>>>\n<<<REPLACE\n(.*?)>>>",
         re.DOTALL,
     )
 

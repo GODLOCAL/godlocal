@@ -83,10 +83,8 @@ class ClaudeCodeBridge:
         """
         if not _CLAUDE_BIN:
             raise RuntimeError(
-                "claude-code CLI not installed.
-"
-                "Install: npm install -g @anthropic-ai/claude-code
-"
+                "claude-code CLI not installed.\n"
+                "Install: npm install -g @anthropic-ai/claude-code\n"
                 "Or:      curl -fsSL https://claude.ai/install.sh | bash"
             )
 
