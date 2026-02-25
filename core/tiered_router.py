@@ -103,22 +103,25 @@ class WASMHandlers:
 
 @dataclass
 class TierStats:
-    wasm_calls: int = 0
-    fast_calls: int = 0
-    full_calls: int = 0
+    wasm_calls:    int = 0
+    fast_calls:    int = 0
+    full_calls:    int = 0
+    giant_calls:   int = 0           # AirLLM 70B tier (added today)
     wasm_saved_tokens: int = 0
     fast_saved_tokens: int = 0
+    sparknet_reports: int = 0        # savings milestone reports emitted
 
     @property
     def total_calls(self) -> int:
-        return self.wasm_calls + self.fast_calls + self.full_calls
+        return self.wasm_calls + self.fast_calls + self.full_calls + self.giant_calls
 
     @property
     def savings_pct(self) -> float:
         if self.total_calls == 0:
             return 0.0
-        wasm_pct = self.wasm_calls / self.total_calls
-        fast_pct = self.fast_calls / self.total_calls
+        wasm_pct  = self.wasm_calls  / self.total_calls
+        fast_pct  = self.fast_calls  / self.total_calls
+        # WASM=100% savings, FAST=60%, FULL/GIANT=0%
         return wasm_pct * 1.0 + fast_pct * 0.6
 
 
@@ -211,12 +214,26 @@ class TieredRouter:
 
     def log_stats(self) -> str:
         s = self.stats
-        return (
+        line = (
             f"TieredRouter: {s.total_calls} calls | "
-            f"WASM={s.wasm_calls} FAST={s.fast_calls} FULL={s.full_calls} | "
+            f"WASM={s.wasm_calls} FAST={s.fast_calls} FULL={s.full_calls} GIANT={s.giant_calls} | "
             f"Est. savings={s.savings_pct:.0%} | "
             f"WASM tokens saved={s.wasm_saved_tokens:,}"
         )
+        # Emit savings milestone to SparkNet every 50 calls
+        if s.total_calls > 0 and s.total_calls % 50 == 0:
+            try:
+                from extensions.xzero.sparknet_connector import get_sparknet
+                import asyncio
+                sparknet = get_sparknet()
+                summary = f"TieredRouter {s.savings_pct:.0%} savings ({s.total_calls} calls, WASM={s.wasm_calls})"
+                asyncio.ensure_future(
+                    sparknet.capture("tiered_router", summary[:200], tags=["tiered", "savings", "routing"])
+                )
+                s.sparknet_reports += 1
+            except Exception:
+                pass
+        return line
 
 
 _default_router: TieredRouter | None = None

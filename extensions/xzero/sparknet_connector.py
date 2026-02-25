@@ -65,6 +65,8 @@ class Spark:
     context_hash:  str          = ""    # hash of capture context (dedup)
     linked_sparks: list[str]    = field(default_factory=list)  # SparkNet edges
     success_score:    float         = 0.5    # ReasoningBank: EMA of outcome (0=fail, 1=success)
+    trial_count:      int           = 0      # Wilson CI: total judge() calls for this spark
+    success_count:    int           = 0      # Wilson CI: cumulative successes (outcome=True)
 
     @classmethod
     def create(cls, source_agent: str, content: str, tags: list[str], context: str = "") -> "Spark":
@@ -329,23 +331,61 @@ Return ONLY the JSON array."""
 
     # ── ReasoningBank pipeline (Claude-Flow) ────────────────────────────────
 
-    async def judge(self, spark_id: str, outcome: bool) -> None:
+    async def judge(self, spark_id: str, outcome: bool) -> float:
         """
-        JUDGE step: update spark.success_score via EMA.
-        Call from post_action_capture() after action completes.
-        new_score = 0.7 * old_score + 0.3 * outcome
+        JUDGE step: EMA score + Wilson CI lower-bound bonus.
+
+        Why Wilson CI (not raw EMA alone):
+          EMA is recency-biased — a new spark that just succeeded looks equally
+          good as one that's succeeded 50 times. Wilson CI lower bound is a
+          pessimistic Bayesian estimate that properly rewards consistency.
+
+        Formula:
+          EMA component:    0.7 * old_score + 0.3 * outcome
+          Wilson lower:     (p_hat + z²/2n - z*√(p_hat(1-p_hat)/n + z²/4n²)) / (1 + z²/n)
+          Final score:      clamp(EMA + wilson_lower * 0.3, 0.0, 1.0)
+
+        Returns new score.
         """
+        import math
         all_sparks = await asyncio.to_thread(self._store.load_all)
         spark = next((s for s in all_sparks if s.id == spark_id), None)
         if spark is None:
-            return
+            return 0.0
+
+        # Update trial counters
+        spark.trial_count   = getattr(spark, "trial_count", 0) + 1
+        spark.success_count = getattr(spark, "success_count", 0) + (1 if outcome else 0)
+
+        # EMA component
         old = getattr(spark, "success_score", 0.5)
-        spark.success_score = 0.7 * old + 0.3 * (1.0 if outcome else 0.0)  # type: ignore
+        ema_score = 0.7 * old + 0.3 * (1.0 if outcome else 0.0)
+
+        # Wilson CI lower bound (z=1.96 for 95% confidence)
+        n = spark.trial_count
+        k = spark.success_count
+        z = 1.96
+        if n >= 2:
+            p_hat   = k / n
+            z2_over_2n = (z ** 2) / (2 * n)
+            z2_over_4n2 = (z ** 2) / (4 * n ** 2)
+            numerator   = p_hat + z2_over_2n - z * math.sqrt(p_hat * (1 - p_hat) / n + z2_over_4n2)
+            denominator = 1 + (z ** 2) / n
+            wilson_lower = max(0.0, numerator / denominator)
+        else:
+            wilson_lower = 0.0   # not enough data for CI yet
+
+        # Combine: EMA primary, Wilson CI adds calibration bonus
+        spark.success_score = max(0.0, min(1.0, ema_score + wilson_lower * 0.3))
+
+        # Decay adjustment
         if outcome:
             spark.relevance_decay = min(1.0, spark.relevance_decay + 0.15)
         else:
             spark.relevance_decay = max(0.1, spark.relevance_decay - 0.1)
+
         await asyncio.to_thread(self._store.upsert, spark)
+        return spark.success_score
 
     async def consolidate(self, min_success_score: float = 0.7, overlap_threshold: float = 0.8) -> int:
         """

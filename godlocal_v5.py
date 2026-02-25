@@ -721,7 +721,81 @@ async def clear_history(key: str = Depends(verify_api_key)):
 
 @app.post("/chat")
 async def chat(req: ChatReq, key: str = Depends(verify_api_key)):
-    return {"response": agent.chat(req.message), "soul": agent.soul.current_soul}
+    message = req.message
+
+    # AutoGenesis V2 force trigger — say "evolve" to kick off GitNexus + Potpie + patch cycle
+    if "evolve" in message.lower():
+        try:
+            if hasattr(agent, "sleep_cycle") and hasattr(agent.sleep_cycle, "_evolve") and agent.sleep_cycle._evolve:
+                import asyncio
+                evolve_result = await agent.sleep_cycle._evolve.run_evolution_cycle(
+                    llm_generate=agent.sleep_cycle.llm,
+                    max_gaps=5,
+                    hours_back=24,
+                )
+                return {
+                    "response": f"AutoGenesis V2 cycle complete — {evolve_result.gaps_resolved}/{evolve_result.gaps_found} gaps resolved.",
+                    "soul": agent.soul.current_soul,
+                    "evolve": {
+                        "gaps_found":    evolve_result.gaps_found,
+                        "gaps_resolved": evolve_result.gaps_resolved,
+                        "topics":        evolve_result.topics_resolved,
+                    },
+                }
+        except Exception as e:
+            logger.warning(f"evolve command failed: {e}")
+
+    return {"response": agent.chat(message), "soul": agent.soul.current_soul}
+
+
+@app.get("/status/warrior")
+async def warrior_status():
+    """
+    Periodic health endpoint — call every 60s for Warrior + Glint + PNL + memory size logging.
+    Sovereign logs: GET /status/warrior  →  returns live metrics snapshot.
+    """
+    from extensions.xzero import get_connector, CONNECTOR_REGISTRY
+    status = {
+        "soul":    agent.soul.current_soul,
+        "memory":  {},
+        "warrior": {},
+        "glint":   {},
+    }
+
+    # Memory size
+    try:
+        import sqlite3
+        c = sqlite3.connect(agent.memory.db_path)
+        count = c.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        c.close()
+        status["memory"] = {"total_memories": count}
+    except Exception:
+        pass
+
+    # SparkNet spark count
+    try:
+        if "sparknet" in CONNECTOR_REGISTRY:
+            sparknet = get_connector("sparknet")()
+            all_sparks = sparknet._store.load_all()
+            status["warrior"]["sparknet_sparks"] = len(all_sparks)
+    except Exception:
+        pass
+
+    # GlintSignalBus — last tick summary (non-blocking, 2s timeout)
+    try:
+        if "glint" in CONNECTOR_REGISTRY:
+            bus = get_connector("glint")()
+            import asyncio
+            signals = await asyncio.wait_for(bus.high_urgency_signals(threshold=0.7), timeout=2.0)
+            status["glint"] = {
+                "high_urgency_signals": len(signals),
+                "sources": list({s.source for s in signals}),
+            }
+    except Exception:
+        pass
+
+    logger.info(f"📊 Warrior status: {status}")
+    return status
 
 @app.post("/create/app")
 async def create_app(req: AppReq):
