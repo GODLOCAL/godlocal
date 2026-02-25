@@ -8,6 +8,7 @@
 - **AutoGenesis V2**: завжди запускати GitNexus `pre_patch_analysis()` + Potpie `query_agent()` перед будь-яким патчем у `_evolve_async()`. Ніколи не патчити наосліп.
 - **Wilson CI в SparkNet**: `judge()` тепер повертає float, рахує `trial_count` + `success_count`. При n ≥ 2 — Wilson CI lower bound додається до EMA (×0.3). Стабільність > одиночний успіх.
 - **ULTRA_FAST chain**: всі мікро-задачі (<300 токенів) маршрутизуються через Taalas HC1 (17k tok/s) → Cerebras (3k tok/s) → Groq (1k tok/s) → Ollama. Мета: середня системна швидкість >3k tok/s.
+- **ClaudeCode local**: для agentic codegen задач (AutoGenesis V2 самопатчинг) — використовувати Claude Code CLI → Ollama (ANTHROPIC_BASE_URL=localhost:11434). Нульова вартість, повна приватність, доступ до file-edit + bash tools.
 - **MobileOBridge**: target ≥64 tok/s на iPhone 17 Pro (A19 Pro). `tokensPerSecond` — @Published, видимий у SwiftUI. RAM < 2GB. CoreML ANE+GPU+CPU compute units.
 - **GlintSignalBus**: логувати кожен сигнал з urgency > 0.75 з таймстемпом і source. Формат: `[GLINT][{source}][{urgency:.2f}] {content}`.
 - **X-ZERO Warrior**: rate-limit 1 trade / 30s. ClosedCandleGate обов'язковий — торгувати тільки в перші 5с нової хвилини. Ніяких open-candle entries.

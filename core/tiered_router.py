@@ -234,8 +234,17 @@ class TieredRouter:
 
         else:
             self.stats.full_calls += 1
-            # Speed chain for FULL: Cerebras (~2k tok/s) → Groq (~400 tok/s) → Ollama
+            # Speed chain for FULL: ClaudeCodeLocal (agentic, free) → Cerebras → Groq → Ollama
             _ttype = task_type or "analyze"
+
+            # For agentic coding tasks: use Claude Code CLI → local Ollama (zero cost)
+            if _ttype == "codegen":
+                from core.claude_code_bridge import ClaudeCodeBridge, is_available as claude_available
+                if claude_available():
+                    try:
+                        return await ClaudeCodeBridge().run_task(prompt, timeout=90)
+                    except Exception:
+                        logger.warning("ClaudeCode local failed — falling back to Cerebras/Groq")
 
             from core.cerebras_bridge import CEREBRAS_AVAILABLE, get_cerebras
             if CEREBRAS_AVAILABLE:
