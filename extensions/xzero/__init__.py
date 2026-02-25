@@ -32,6 +32,7 @@ CONNECTOR_REGISTRY: dict[str, tuple[str, str]] = {
     "vinext":       ("extensions.xzero.vinext_connector",       "VinextReplicateConnector"),
     "delegation":   ("extensions.xzero.xzero_delegation",      "XZeroDelegation"),
     "sparknet":     ("extensions.xzero.sparknet_connector",     "SparkNetConnector"),
+    "potpie":       ("extensions.xzero.potpie_connector",       "PotpieConnector"),
 }
 
 def get_connector(name: str):
@@ -40,6 +41,9 @@ def get_connector(name: str):
     Example:
         polyterm = get_connector("polyterm")()
         pulse    = await polyterm.solana_prediction_pulse()
+
+        potpie   = get_connector("potpie")()
+        result   = await potpie.query_agent(project_id="godlocal", question="How does AgentPool route tasks?")
     """
     if name not in CONNECTOR_REGISTRY:
         raise KeyError(f"Unknown: {name!r}. Available: {sorted(CONNECTOR_REGISTRY)}")
@@ -59,4 +63,5 @@ __all__ = [
     "get_connector",
     "CONNECTOR_REGISTRY",
     "SteerlingConnector",
+    "PotpieConnector",
 ]
