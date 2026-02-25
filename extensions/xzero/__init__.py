@@ -16,11 +16,46 @@ CONNECTORS = {
     "jupiter":    JupiterEnhancedConnector,
 }
 
+# v7.0.0 — CONNECTOR_REGISTRY with lazy loading
+from .sparknet_connector     import SparkNetConnector, get_sparknet   # stdlib-only, safe to import
+from .solscan_free_connector import SolscanFreeConnector               # no API key needed
+
+CONNECTOR_REGISTRY: dict[str, tuple[str, str]] = {
+    "manifold":     ("extensions.xzero.manifold_connector",     "ManifoldConnector"),
+    "kalshi":       ("extensions.xzero.kalshi_connector",       "KalshiConnector"),
+    "hyperliquid":  ("extensions.xzero.hyperliquid_connector",  "HyperliquidConnector"),
+    "jupiter":      ("extensions.xzero.jupiter_enhanced",       "JupiterEnhancedConnector"),
+    "polyterm":     ("extensions.xzero.polyterm_connector",     "PolytermConnector"),
+    "gitnexus":     ("extensions.xzero.gitnexus_connector",     "GitNexusMCPConnector"),
+    "moonpay":      ("extensions.xzero.moonpay_agents_connector", "MoonPayAgentsConnector"),
+    "solscan":      ("extensions.xzero.solscan_free_connector", "SolscanFreeConnector"),
+    "vinext":       ("extensions.xzero.vinext_connector",       "VinextReplicateConnector"),
+    "delegation":   ("extensions.xzero.xzero_delegation",      "XZeroDelegation"),
+    "sparknet":     ("extensions.xzero.sparknet_connector",     "SparkNetConnector"),
+}
+
+def get_connector(name: str):
+    """Load any connector by name (lazy import, avoids heavy startup cost).
+
+    Example:
+        polyterm = get_connector("polyterm")()
+        pulse    = await polyterm.solana_prediction_pulse()
+    """
+    if name not in CONNECTOR_REGISTRY:
+        raise KeyError(f"Unknown: {name!r}. Available: {sorted(CONNECTOR_REGISTRY)}")
+    module, cls = CONNECTOR_REGISTRY[name]
+    import importlib
+    return getattr(importlib.import_module(module), cls)
+
 __all__ = [
     "XZeroConnector",
     "ManifoldConnector",
     "KalshiConnector",
     "HyperliquidConnector",
     "JupiterEnhancedConnector",
-    "CONNECTORS",
+    "SparkNetConnector",
+    "SolscanFreeConnector",
+    "get_sparknet",
+    "get_connector",
+    "CONNECTOR_REGISTRY",
 ]

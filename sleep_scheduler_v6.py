@@ -31,7 +31,7 @@ def _next_run_dt(hour: int, minute: int) -> datetime.datetime:
 
 async def sleep_cycle() -> None:
     """Execute 4-phase sleep cycle."""
-    logger.info("🌙 sleep_cycle START")
+    logger.info("🌙 sleep_cycle START — Phases 1-5")
     brain = Brain.get()
     autogenesis = AutoGenesis(root=".")
 
@@ -90,6 +90,44 @@ async def scheduler_loop() -> None:
             await sleep_cycle()
         except Exception as e:
             logger.error("sleep_cycle crashed: %s", e)
+
+
+
+async def _phase_5_heartbeat() -> None:
+    """Phase 5 — XZeroHeartbeat: 30-min autonomous X-ZERO market monitor."""
+    logger.info("[Phase 5] XZeroHeartbeat")
+    try:
+        from agents.xzero.heartbeat import XZeroHeartbeat
+        hb = XZeroHeartbeat()
+        await hb.run_once()
+        logger.info("[Phase 5] Heartbeat complete")
+    except Exception as _e:
+        logger.warning("[Phase 5] Heartbeat error: %s", _e)
+
+
+async def _phase_4b_sparknet(brain) -> None:
+    """Phase 4b — SparkNet distill + SkillOrchestra refine."""
+    logger.info("[Phase 4b] SparkNet distill + SkillOrchestra refine")
+    try:
+        from extensions.xzero.sparknet_connector import get_sparknet
+        sn = get_sparknet()
+        _agents = ["goal_executor", "claw_feed", "xzero_heartbeat", "autogenesis"]
+        for _agent in _agents:
+            _log_file = Path(f"logs/{_agent}.log")
+            if _log_file.exists():
+                _lines = _log_file.read_text(encoding="utf-8").splitlines()[-50:]
+                await sn.distill(_agent, _lines)
+        _counts = await sn.sync()
+        logger.info("[Phase 4b] SparkNet synced: %s", _counts)
+    except Exception as _e:
+        logger.warning("[Phase 4b] SparkNet error: %s", _e)
+
+    try:
+        from core.skill_orchestra import SkillHandbook
+        SkillHandbook().refine(brain)
+        logger.info("[Phase 4b] SkillHandbook refined")
+    except Exception as _e:
+        logger.warning("[Phase 4b] SkillOrchestra error: %s", _e)
 
 
 def start_scheduler() -> asyncio.Task:

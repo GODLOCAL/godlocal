@@ -19,6 +19,9 @@ from core.brain import Brain
 from core.settings import settings
 from agents.agent_pool import agent_pool
 from agents.autogenesis_v2 import AutoGenesis
+from agents.goal_executor import GoalExecutor
+from agents.claw_feed import ClawFeedAgent
+from core.skill_orchestra import SkillOrchestraRouter
 from models.schemas import (
     AgentSwapResponse,
     EvolveRequest,
@@ -33,8 +36,10 @@ from utils.logger import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-_start_time = time.time()
-_autogenesis = AutoGenesis(root=".")
+_start_time    = time.time()
+_autogenesis   = AutoGenesis(root=".")
+_goal_executor = GoalExecutor()
+_skill_router  = SkillOrchestraRouter()
 
 # ── Auth ──────────────────────────────────────────────────────────────────
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -57,6 +62,14 @@ async def lifespan(app: FastAPI):
     # Start nightly scheduler
     from sleep_scheduler_v6 import start_scheduler
     scheduler_task = start_scheduler()
+
+    # Boot SparkNet (creates .gitnexus/sparknet.db)
+    try:
+        from extensions.xzero.sparknet_connector import get_sparknet
+        get_sparknet()
+        logger.info("SparkNet: ready")
+    except Exception as _e:
+        logger.warning("SparkNet init skipped: %s", _e)
 
     # AutoGenesis Shortcuts server (optional)
     if settings.model:  # always True — just gate on env flag if needed
@@ -216,6 +229,47 @@ async def feedback(was_corrected: bool):
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────────
+
+
+# ── GoalExecutor endpoints ────────────────────────────────────────────────────
+@app.get("/goals")
+async def list_goals():
+    """Active goals tracked by GoalExecutor."""
+    return _goal_executor.list_goals()
+
+@app.post("/goals/run", dependencies=[Depends(verify_api_key)])
+async def run_goal(body: dict):
+    """Submit a goal for GoalExecutor."""
+    goal_id = await _goal_executor.submit(body.get("goal", ""))
+    return {"goal_id": goal_id, "status": "queued"}
+
+@app.get("/goals/{goal_id}")
+async def get_goal(goal_id: str):
+    return _goal_executor.get_status(goal_id)
+
+# ── X-ZERO signal endpoints ───────────────────────────────────────────────────
+@app.get("/signals")
+async def get_signals():
+    """Latest X-ZERO prediction signals (SOL/BTC/ETH) from PolytermConnector."""
+    try:
+        from extensions.xzero.polyterm_connector import PolytermConnector
+        return await PolytermConnector().solana_prediction_pulse()
+    except Exception as _e:
+        return {"error": str(_e)}
+
+@app.get("/spark/summary")
+async def spark_summary():
+    """SparkNet memory state."""
+    from extensions.xzero.sparknet_connector import get_sparknet
+    return {"summary": await get_sparknet().spark_summary()}
+
+@app.get("/spark/evoke")
+async def evoke_sparks(agent: str = "default", context: str = ""):
+    """Retrieve relevant Sparks for an agent + context."""
+    from extensions.xzero.sparknet_connector import get_sparknet
+    sparks = await get_sparknet().evoke(agent, context)
+    return [{"id": s.id, "content": s.content, "tags": s.tags, "decay": s.decay()} for s in sparks]
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="БОГ || OASIS v6")
     ap.add_argument("--host",      default=settings.api_host)
