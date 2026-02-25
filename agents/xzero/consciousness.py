@@ -1,33 +1,20 @@
 """
 agents/xzero/consciousness.py
-Background Consciousness Loop — inspired by Ouroboros self-evolving agent.
+Background Consciousness Loop — Ouroboros pattern, zero-cost edition.
 
-Ouroboros pattern (@aigclink / 2026-02-25):
-  - Agent thinks continuously even with zero user interaction
-  - Decides autonomously WHAT to think about
-  - Fixed cost per thought cycle (~$0.06-0.08 via full LLM)
-  - 30+ self-patches in 48 hours, zero human intervention
+Cost strategy:
+  1. MICRO tier: BitNet b1.58 2B (local, FREE) -> LFM2.5-1.2B ONNX (local, FREE)
+  2. Groq free tier: Qwen3-32b / GPT-OSS-20b (~$0.00, rate-limited but enough for 5-min ticks)
+  3. Cerebras free tier: llama3.1-8b @ ~3k tok/s (~$0.00, generous free quota)
 
-GodLocal adaptation:
-  - Uses MICRO tier (BitNet/LFM2/Groq) for thought generation (~$0.001/cycle)
-  - Thought topics auto-selected from SparkNet high-priority sparks
-  - New insights → distilled back into SparkNet (ReasoningBank loop)
-  - Self-patch proposals → forwarded to AutoGenesisV2 queue
-  - Runs as asyncio background task, configurable tick interval
-
-Architecture:
-  ConsciousnessLoop
-    tick() every CONSCIOUSNESS_INTERVAL seconds
-      -> _select_topic()    : pick top SparkNet spark or generate novel topic
-      -> _think(topic)      : MICRO/FAST tier inference, ~128 tokens
-      -> _distill(thought)  : compress to <=200 chars, store in SparkNet
-      -> _maybe_self_patch(): if thought contains patch signal -> AutoGenesis queue
+Ouroboros spent ~$0.07/thought (frontier model). We spend $0.00 (local/free tiers).
 
 Env:
-  CONSCIOUSNESS_ENABLED    true/false (default: true)
-  CONSCIOUSNESS_INTERVAL   seconds between ticks (default: 300 = 5 min)
-  CONSCIOUSNESS_MAX_TOKENS max tokens per thought (default: 128)
-  CONSCIOUSNESS_SELF_PATCH true to enable self-patch proposals (default: false)
+  CONSCIOUSNESS_ENABLED        true/false (default: true)
+  CONSCIOUSNESS_INTERVAL       seconds between ticks (default: 300 = 5 min)
+  CONSCIOUSNESS_MAX_TOKENS     max tokens per thought (default: 128)
+  CONSCIOUSNESS_SELF_PATCH     true to enable self-patch proposals (default: false)
+  CONSCIOUSNESS_FORCE_TIER     micro / groq / cerebras (override auto-select)
 """
 from __future__ import annotations
 
@@ -42,11 +29,11 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _ENABLED      = os.getenv("CONSCIOUSNESS_ENABLED", "true").lower() != "false"
-_INTERVAL     = float(os.getenv("CONSCIOUSNESS_INTERVAL", "300"))       # 5 min default
+_INTERVAL     = float(os.getenv("CONSCIOUSNESS_INTERVAL", "300"))
 _MAX_TOKENS   = int(os.getenv("CONSCIOUSNESS_MAX_TOKENS", "128"))
 _SELF_PATCH   = os.getenv("CONSCIOUSNESS_SELF_PATCH", "false").lower() == "true"
+_FORCE_TIER   = os.getenv("CONSCIOUSNESS_FORCE_TIER", "").lower()  # micro/groq/cerebras/""
 
-# Topics the agent explores when SparkNet is empty
 _SEED_TOPICS = [
     "What optimization in the inference pipeline would yield the highest ROI right now?",
     "What market signal patterns are being missed by current OSINT sources?",
@@ -62,38 +49,48 @@ _PATCH_KEYWORDS = {
     "upgrade", "replace", "optimize", "bug", "issue", "todo",
 }
 
+_THOUGHT_PROMPT = (
+    "As an autonomous AI agent focused on maximizing performance and value:\n\n"
+    "{topic}\n\n"
+    "Give a concise, actionable insight (max 2 sentences)."
+)
+
 
 @dataclass
 class Thought:
     topic:    str
     content:  str
-    cost_est: float          # estimated $ cost of this thought
+    cost_est: float = 0.0
+    tier_used: str  = "unknown"
     ts:       float = field(default_factory=time.time)
     spark_id: Optional[str] = None
 
 
 @dataclass
 class ConsciousnessStats:
-    total_ticks:    int   = 0
-    total_thoughts: int   = 0
-    total_sparks:   int   = 0
-    patch_proposals: int  = 0
-    total_cost_est: float = 0.0
-    last_tick_at:   float = 0.0
+    total_ticks:     int   = 0
+    total_thoughts:  int   = 0
+    total_sparks:    int   = 0
+    patch_proposals: int   = 0
+    tier_counts: dict      = field(default_factory=dict)
+    last_tick_at:    float = 0.0
+
+    @property
+    def total_cost_est(self) -> float:
+        # All tiers are free; estimate is $0.00
+        return 0.0
 
 
 class ConsciousnessLoop:
     """
-    Background consciousness loop for GodLocal xzero agent.
+    Background consciousness loop — zero-cost edition.
 
-    Continuously generates thoughts even without user interaction.
-    Stores insights in SparkNet. Optionally proposes self-patches
-    to AutoGenesisV2.
-
-    Cost estimate per thought:
-      MICRO tier (BitNet/LFM2): ~$0.0001
-      FAST tier (Groq/Cerebras): ~$0.001-0.005
-      vs Ouroboros baseline: ~$0.06-0.08 (full frontier model)
+    Think priority (all free):
+      1. BitNet b1.58 2B     — local GGUF, 0 API cost, ~40 tok/s CPU
+      2. LFM2.5-1.2B ONNX   — local ONNX, 0 API cost, 200+ tok/s GPU
+      3. Groq free tier      — Qwen3-32b / GPT-OSS-20b, rate-limited but free
+      4. Cerebras free tier  — llama3.1-8b ~3k tok/s, generous free quota
+      5. Ollama local        — any model running locally, 0 API cost
     """
 
     def __init__(self) -> None:
@@ -102,26 +99,16 @@ class ConsciousnessLoop:
         self._topic_idx = 0
         self._thought_history: list[Thought] = []
 
-    # ------------------------------------------------------------------ #
-    # Public API
-    # ------------------------------------------------------------------ #
-
     async def start(self) -> None:
-        """Start the background consciousness loop."""
         if not _ENABLED:
             logger.info("[Consciousness] Disabled via CONSCIOUSNESS_ENABLED=false")
             return
         if self._task is not None:
-            logger.warning("[Consciousness] Already running")
             return
-        logger.info(
-            "[Consciousness] Starting — interval=%.0fs, self_patch=%s",
-            _INTERVAL, _SELF_PATCH
-        )
+        logger.info("[Consciousness] Starting (free-tier mode) — interval=%.0fs", _INTERVAL)
         self._task = asyncio.ensure_future(self._loop())
 
     async def stop(self) -> None:
-        """Stop the background loop gracefully."""
         if self._task:
             self._task.cancel()
             try:
@@ -129,26 +116,23 @@ class ConsciousnessLoop:
             except asyncio.CancelledError:
                 pass
             self._task = None
-        logger.info("[Consciousness] Stopped — %d thoughts generated", self.stats.total_thoughts)
 
     async def tick(self) -> Optional[Thought]:
-        """Manually trigger one consciousness tick (useful for testing)."""
         return await self._tick()
 
     def summary(self) -> str:
         s = self.stats
+        tiers = ", ".join(f"{k}={v}" for k, v in s.tier_counts.items())
         return (
             f"Consciousness: {s.total_ticks} ticks, {s.total_thoughts} thoughts, "
-            f"{s.total_sparks} sparks stored, {s.patch_proposals} patch proposals, "
-            f"est. cost=${s.total_cost_est:.4f}"
+            f"{s.total_sparks} sparks | tiers=[{tiers}] | cost=$0.00 (free)"
         )
 
     # ------------------------------------------------------------------ #
-    # Internal loop
+    # Internal
     # ------------------------------------------------------------------ #
 
     async def _loop(self) -> None:
-        logger.info("[Consciousness] Loop started")
         while True:
             try:
                 await self._tick()
@@ -166,31 +150,28 @@ class ConsciousnessLoop:
         if not topic:
             return None
 
-        thought_text = await self._think(topic)
+        thought_text, tier_used = await self._think(topic)
         if not thought_text:
             return None
 
-        cost = self._estimate_cost(thought_text)
-        thought = Thought(topic=topic, content=thought_text, cost_est=cost)
+        thought = Thought(topic=topic, content=thought_text, cost_est=0.0, tier_used=tier_used)
         self.stats.total_thoughts += 1
-        self.stats.total_cost_est += cost
+        self.stats.tier_counts[tier_used] = self.stats.tier_counts.get(tier_used, 0) + 1
         self._thought_history.append(thought)
         if len(self._thought_history) > 100:
             self._thought_history = self._thought_history[-100:]
 
-        # Distill into SparkNet
         spark_id = await self._distill(thought)
         thought.spark_id = spark_id
         if spark_id:
             self.stats.total_sparks += 1
 
-        # Maybe propose self-patch
         if _SELF_PATCH:
             await self._maybe_self_patch(thought)
 
         logger.debug(
-            "[Consciousness] Tick #%d — topic=%r cost=$%.4f spark=%s",
-            self.stats.total_ticks, topic[:60], cost, spark_id or "none"
+            "[Consciousness] tick #%d tier=%s spark=%s | %s",
+            self.stats.total_ticks, tier_used, spark_id or "none", topic[:50]
         )
         return thought
 
@@ -199,137 +180,174 @@ class ConsciousnessLoop:
     # ------------------------------------------------------------------ #
 
     async def _select_topic(self) -> Optional[str]:
-        """
-        Select what to think about:
-        1. Top-priority unresolved spark from SparkNet (if available)
-        2. Round-robin through seed topics
-        """
-        # Try SparkNet for high-signal unresolved context
         try:
             from extensions.xzero.sparknet_connector import get_sparknet
-            sparknet = get_sparknet()
-            sparks = await sparknet.retrieve("unresolved high priority action", top_k=3, threshold=0.3)
+            sparks = await get_sparknet().retrieve(
+                "unresolved high priority action", top_k=3, threshold=0.3
+            )
             if sparks:
-                # Pick the most recent high-relevance spark as topic
-                best = sparks[0]
-                return f"Reflect on and extend this insight: {best.content[:150]}"
-        except Exception as e:
-            logger.debug("[Consciousness] SparkNet topic fetch failed: %s", e)
-
-        # Fall back to seed topics (round-robin)
+                return f"Reflect on and extend this insight: {sparks[0].content[:150]}"
+        except Exception:
+            pass
         topic = _SEED_TOPICS[self._topic_idx % len(_SEED_TOPICS)]
         self._topic_idx += 1
         return topic
 
     # ------------------------------------------------------------------ #
-    # Thinking (MICRO tier preferred for cost efficiency)
+    # Free-tier think cascade
     # ------------------------------------------------------------------ #
 
-    async def _think(self, topic: str) -> Optional[str]:
-        """Generate a thought using the tiered router (MICRO tier preferred)."""
+    async def _think(self, topic: str) -> tuple[Optional[str], str]:
+        """
+        Think using free resources only.
+        Returns (thought_text, tier_name).
+
+        Priority:
+          micro   -> BitNet/LFM2 local (task_type="reason" -> MICRO tier)
+          groq    -> Groq free tier (Qwen3-32b, rate-limited)
+          cerebras-> Cerebras free tier (llama3.1-8b, ~3k tok/s)
+          ollama  -> local Ollama fallback
+        """
+        prompt = _THOUGHT_PROMPT.format(topic=topic)
+
+        # Allow forcing a specific tier via env
+        force = _FORCE_TIER  # "micro" / "groq" / "cerebras" / ""
+
+        # 1. MICRO tier: BitNet -> LFM2 (local, completely free)
+        if force in ("", "micro"):
+            result = await self._try_micro(prompt)
+            if result:
+                return result, "micro"
+
+        # 2. Groq free tier
+        if force in ("", "groq"):
+            result = await self._try_groq(prompt)
+            if result:
+                return result, "groq"
+
+        # 3. Cerebras free tier
+        if force in ("", "cerebras"):
+            result = await self._try_cerebras(prompt)
+            if result:
+                return result, "cerebras"
+
+        # 4. Local Ollama (always free)
+        result = await self._try_ollama(prompt)
+        if result:
+            return result, "ollama"
+
+        return None, "none"
+
+    async def _try_micro(self, prompt: str) -> Optional[str]:
+        """BitNet -> LFM2 via MICRO tier (task_type=reason routes to MICRO)."""
         try:
-            from core.tiered_router import get_tiered_router
+            from core.tiered_router import Tier, get_tiered_router
             router = get_tiered_router()
-            prompt = (
-                f"As an autonomous AI agent focused on maximizing performance and value:\n\n"
-                f"{topic}\n\n"
-                f"Give a concise, actionable insight (max 2 sentences)."
-            )
-            # Use FAST tier for better thought quality (still cheap vs frontier)
-            thought = await router.complete(
+            # "reason" is in MICRO_TASK_TYPES -> routes BitNet->LFM2->FAST
+            result = await router.complete(
                 prompt,
-                task_type="analyze",
+                task_type="reason",       # MICRO tier: BitNet -> LFM2 thinking mode
                 max_tokens=_MAX_TOKENS,
-                force_tier=None,  # Let router decide (will use FULL for "analyze")
+                force_tier=Tier.MICRO,    # Explicit force; won't spill to FAST
             )
-            return thought.strip() if thought else None
+            return result.strip() if result else None
         except Exception as e:
-            logger.warning("[Consciousness] Think failed: %s", e)
+            logger.debug("[Consciousness] MICRO failed: %s", e)
+            return None
+
+    async def _try_groq(self, prompt: str) -> Optional[str]:
+        """Groq free tier — Qwen3-32b or GPT-OSS-20b."""
+        try:
+            from core.groq_connector import GROQ_AVAILABLE, get_groq
+            if not GROQ_AVAILABLE:
+                return None
+            # Use plan task_type -> routes to kimi-k2 (256k ctx, good for reasoning)
+            result = await get_groq().complete(prompt, task_type="plan", max_tokens=_MAX_TOKENS)
+            return result.strip() if result else None
+        except Exception as e:
+            logger.debug("[Consciousness] Groq free failed: %s", e)
+            return None
+
+    async def _try_cerebras(self, prompt: str) -> Optional[str]:
+        """Cerebras free tier — llama3.1-8b @ ~3k tok/s."""
+        try:
+            from core.cerebras_bridge import CEREBRAS_AVAILABLE, get_cerebras
+            if not CEREBRAS_AVAILABLE:
+                return None
+            result = await get_cerebras().complete(prompt, task_type="analyze", max_tokens=_MAX_TOKENS)
+            return result.strip() if result else None
+        except Exception as e:
+            logger.debug("[Consciousness] Cerebras free failed: %s", e)
+            return None
+
+    async def _try_ollama(self, prompt: str) -> Optional[str]:
+        """Local Ollama — always free, slowest."""
+        try:
+            from core.brain import Brain
+            brain = Brain()
+            result = await brain.async_complete(prompt, max_tokens=_MAX_TOKENS)
+            return result.strip() if result else None
+        except Exception as e:
+            logger.debug("[Consciousness] Ollama failed: %s", e)
             return None
 
     # ------------------------------------------------------------------ #
-    # Distillation into SparkNet
+    # Distill -> SparkNet
     # ------------------------------------------------------------------ #
 
     async def _distill(self, thought: Thought) -> Optional[str]:
-        """Compress thought to <=200 chars and store in SparkNet."""
         try:
             from extensions.xzero.sparknet_connector import get_sparknet
-            from core.tiered_router import get_tiered_router
+            distilled = thought.content[:200].strip()
 
-            sparknet = get_sparknet()
-            router   = get_tiered_router()
-
-            # Compress to <=200 chars via MICRO tier
-            distilled = await router.complete(
-                f"Compress to <=200 chars: {thought.content}",
-                task_type="summarize_short",
-                max_tokens=64,
-            )
-            distilled = distilled[:200].strip()
+            # Try to compress further via MICRO tier (free)
+            try:
+                from core.tiered_router import Tier, get_tiered_router
+                router = get_tiered_router()
+                compressed = await router.complete(
+                    f"Compress to <=200 chars: {thought.content}",
+                    task_type="summarize_short",
+                    max_tokens=64,
+                    force_tier=Tier.MICRO,
+                )
+                if compressed:
+                    distilled = compressed[:200].strip()
+            except Exception:
+                pass
 
             ctx_hash = hashlib.sha256(thought.topic.encode()).hexdigest()[:16]
-            spark_id = await sparknet.capture(
+            spark_id = await get_sparknet().capture(
                 source="consciousness",
                 content=distilled,
-                tags=["consciousness", "auto-thought"],
+                tags=["consciousness", "auto-thought", thought.tier_used],
                 context_hash=ctx_hash,
             )
             return spark_id
         except Exception as e:
-            logger.debug("[Consciousness] Distill/store failed: %s", e)
+            logger.debug("[Consciousness] Distill failed: %s", e)
             return None
 
     # ------------------------------------------------------------------ #
-    # Self-patch proposal
+    # Self-patch
     # ------------------------------------------------------------------ #
 
     async def _maybe_self_patch(self, thought: Thought) -> None:
-        """
-        If the thought contains a patch signal, forward to AutoGenesisV2 queue.
-        Only active when CONSCIOUSNESS_SELF_PATCH=true.
-        """
         lower = thought.content.lower()
-        has_patch_signal = any(kw in lower for kw in _PATCH_KEYWORDS)
-        if not has_patch_signal:
+        if not any(kw in lower for kw in _PATCH_KEYWORDS):
             return
-
         try:
             from agents.autogenesis_v2 import get_autogenesis
-            ag = get_autogenesis()
-            await ag.enqueue_patch_proposal(
+            await get_autogenesis().enqueue_patch_proposal(
                 source="consciousness",
                 description=thought.content[:500],
                 priority=0.5,
             )
-            self.stats.patch_proposals += 1
-            logger.info(
-                "[Consciousness] Patch proposal enqueued: %s",
-                thought.content[:80]
-            )
+            self.stats.patch_proposals = getattr(self.stats, "patch_proposals", 0) + 1
+            logger.info("[Consciousness] Patch enqueued: %s", thought.content[:80])
         except Exception as e:
             logger.debug("[Consciousness] Patch proposal failed: %s", e)
 
-    # ------------------------------------------------------------------ #
-    # Cost estimation
-    # ------------------------------------------------------------------ #
 
-    @staticmethod
-    def _estimate_cost(text: str) -> float:
-        """
-        Rough cost estimate per thought.
-        MICRO tier (local CPU): ~$0.0001
-        FAST tier (Groq/Cerebras): ~$0.001
-        vs Ouroboros (frontier): ~$0.06-0.08
-        """
-        tokens = len(text.split()) * 4 // 3
-        # Assume FAST tier pricing (~$0.00001/token blended)
-        return tokens * 0.00001
-
-
-# --------------------------------------------------------------------------- #
-# Singleton
-# --------------------------------------------------------------------------- #
 _instance: Optional[ConsciousnessLoop] = None
 
 
@@ -341,5 +359,4 @@ def get_consciousness() -> ConsciousnessLoop:
 
 
 async def start_consciousness() -> None:
-    """Convenience: get singleton and start."""
     await get_consciousness().start()
