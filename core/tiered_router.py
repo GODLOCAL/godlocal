@@ -200,15 +200,30 @@ class TieredRouter:
         elif tier == Tier.FAST:
             self.stats.fast_calls += 1
             self.stats.fast_saved_tokens += int(self.wasm.count_tokens_approx(prompt) * 0.6)
-            # Try Groq LPU first (~1000 tok/s on gpt-oss-20b) — fall back to Ollama on failure
+            # Speed chain: Taalas HC1 (~17k tok/s) → Cerebras (~3k tok/s) → Groq (~1k tok/s) → Ollama
+            _ttype = task_type or "classify"
+
+            from core.taalas_bridge import TAALAS_AVAILABLE, get_taalas
+            if TAALAS_AVAILABLE:
+                try:
+                    return await get_taalas().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
+                except Exception:
+                    logger.warning("Taalas FAST failed — falling back to Cerebras/Groq")
+
+            from core.cerebras_bridge import CEREBRAS_AVAILABLE, get_cerebras
+            if CEREBRAS_AVAILABLE:
+                try:
+                    return await get_cerebras().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
+                except Exception:
+                    logger.warning("Cerebras FAST failed — falling back to Groq")
+
             from core.groq_connector import GROQ_AVAILABLE, get_groq
             if GROQ_AVAILABLE:
                 try:
-                    return await get_groq().complete(
-                        prompt, task_type=task_type or "classify", max_tokens=max_tokens
-                    )
+                    return await get_groq().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
                 except Exception:
                     logger.warning("Groq FAST failed — falling back to Ollama")
+
             brain = self._get_fast_brain()
             return await brain.async_complete(prompt, max_tokens=max_tokens)
 
@@ -219,15 +234,23 @@ class TieredRouter:
 
         else:
             self.stats.full_calls += 1
-            # Try Groq LPU first (~400 tok/s on qwen3-32b / kimi-k2) — fall back to Ollama
+            # Speed chain for FULL: Cerebras (~2k tok/s) → Groq (~400 tok/s) → Ollama
+            _ttype = task_type or "analyze"
+
+            from core.cerebras_bridge import CEREBRAS_AVAILABLE, get_cerebras
+            if CEREBRAS_AVAILABLE:
+                try:
+                    return await get_cerebras().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
+                except Exception:
+                    logger.warning("Cerebras FULL failed — falling back to Groq")
+
             from core.groq_connector import GROQ_AVAILABLE, get_groq
             if GROQ_AVAILABLE:
                 try:
-                    return await get_groq().complete(
-                        prompt, task_type=task_type or "analyze", max_tokens=max_tokens
-                    )
+                    return await get_groq().complete(prompt, task_type=_ttype, max_tokens=max_tokens)
                 except Exception:
                     logger.warning("Groq FULL failed — falling back to Ollama")
+
             brain = self._get_brain()
             return await brain.async_complete(prompt, max_tokens=max_tokens)
 
