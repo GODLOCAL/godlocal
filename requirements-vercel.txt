@@ -1,0 +1,7 @@
+# GodLocal Vercel Edge - slim deps (no heavy local models)
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+groq>=0.13.0
+httpx>=0.27.0
