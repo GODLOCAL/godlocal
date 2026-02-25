@@ -23,9 +23,10 @@ from typing import Any, Optional
 
 
 class Tier(Enum):
-    WASM = 0   # Pure Python, 0 tokens
-    FAST = 1   # Lightweight Ollama model (~60% token saving)
-    FULL = 2   # Full Brain model (baseline)
+    WASM  = 0   # Pure Python, 0 tokens
+    FAST  = 1   # Lightweight Ollama model (~60% token saving)
+    FULL  = 2   # Full Brain model (baseline)
+    GIANT = 3   # AirLLM layer-by-layer 70B+ on 4GB VRAM
 
 
 WASM_TASK_TYPES = {
@@ -42,6 +43,10 @@ FULL_TASK_TYPES = {
     "codegen", "distill", "analyze", "plan", "reason",
     "generate_long", "multi_step", "creative"
 }
+
+GIANT_TASK_TYPES = {
+    "giant", "deep_reason", "long_analysis", "research", "expert"
+}  # → AirLLM 70B layer-by-layer
 
 FAST_MODEL = os.getenv("GODLOCAL_FAST_MODEL", "qwen3:1.7b")
 
@@ -158,11 +163,15 @@ class TieredRouter:
                 return Tier.FAST
             if task_type in FULL_TASK_TYPES:
                 return Tier.FULL
+            if task_type in GIANT_TASK_TYPES:
+                return Tier.GIANT
         approx = self.wasm.count_tokens_approx(prompt)
         if approx < 50:
             return Tier.WASM
         if approx < 300:
             return Tier.FAST
+        if approx > 2000:
+            return Tier.GIANT   # Very long prompt → AirLLM 70B
         return Tier.FULL
 
     async def complete(
@@ -189,6 +198,11 @@ class TieredRouter:
             self.stats.fast_saved_tokens += int(self.wasm.count_tokens_approx(prompt) * 0.6)
             brain = self._get_fast_brain()
             return await brain.async_complete(prompt, max_tokens=max_tokens)
+
+        elif tier == Tier.GIANT:
+            # AirLLM: 70B layer-by-layer on 4-8GB VRAM. pip install airllm on VPS.
+            from core.airllm_bridge import get_airllm
+            return await get_airllm().complete(prompt, max_new_tokens=max_tokens)
 
         else:
             self.stats.full_calls += 1
