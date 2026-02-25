@@ -1,15 +1,16 @@
 """
 core/tiered_router.py
-TieredRouter — 3-tier cost routing for GodLocal LLM calls.
+TieredRouter — 4-tier cost routing for GodLocal LLM calls.
 
-Claude-Flow pattern: WASM (Python) → fast model → full model
-~75% token savings on micro-tasks.
+Claude-Flow pattern: WASM (Python) → fast model → full model → GIANT (AirLLM 70B)
+When GROQ_API_KEY is set, FAST/FULL tiers use Groq LPU (~500 tok/s) and fall
+back to local Ollama only on Groq failure.  ~75-80% token savings on micro-tasks.
 
 Usage:
     from core.tiered_router import TieredRouter, get_tiered_router
     router = get_tiered_router()
     result = await router.complete(prompt, task_type="format")    # WASM tier
-    result = await router.complete(prompt, task_type="classify")  # fast tier
+    result = await router.complete(prompt, task_type="classify")  # FAST (Groq/Ollama)
     result = await router.complete(prompt, task_type="codegen")   # full tier
 """
 from __future__ import annotations
@@ -199,6 +200,13 @@ class TieredRouter:
         elif tier == Tier.FAST:
             self.stats.fast_calls += 1
             self.stats.fast_saved_tokens += int(self.wasm.count_tokens_approx(prompt) * 0.6)
+            # Try Groq LPU first (~500 tok/s) — fall back to local Ollama on failure/absence
+            from core.groq_connector import GROQ_AVAILABLE, get_groq
+            if GROQ_AVAILABLE:
+                try:
+                    return await get_groq().complete(prompt, tier="fast", max_tokens=max_tokens)
+                except Exception:
+                    logger.warning("Groq FAST failed — falling back to Ollama")
             brain = self._get_fast_brain()
             return await brain.async_complete(prompt, max_tokens=max_tokens)
 
@@ -209,6 +217,13 @@ class TieredRouter:
 
         else:
             self.stats.full_calls += 1
+            # Try Groq LPU first (Kimi K2-0905, GPT-4 class) — fall back to local Ollama
+            from core.groq_connector import GROQ_AVAILABLE, get_groq
+            if GROQ_AVAILABLE:
+                try:
+                    return await get_groq().complete(prompt, tier="full", max_tokens=max_tokens)
+                except Exception:
+                    logger.warning("Groq FULL failed — falling back to Ollama")
             brain = self._get_brain()
             return await brain.async_complete(prompt, max_tokens=max_tokens)
 
