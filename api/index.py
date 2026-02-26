@@ -1,6 +1,6 @@
 """
 GodLocal Edge API — zero-dependency Vercel Lambda
-Groq called via urllib (no groq package needed)
+Groq called via urllib; live market data via CoinGecko (no key needed)
 """
 import json
 import os
@@ -11,11 +11,58 @@ import urllib.error
 from http.server import BaseHTTPRequestHandler
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+COINGECKO_URL = (
+    "https://api.coingecko.com/api/v3/simple/price"
+    "?ids=bitcoin,ethereum,solana,binancecoin,sui"
+    "&vs_currencies=usd"
+    "&include_24hr_change=true"
+    "&include_market_cap=true"
+)
 GROQ_MODEL = "llama-3.1-8b-instant"
 
 _kill_switch: bool = os.environ.get("XZERO_KILL_SWITCH", "false").lower() == "true"
 _thoughts: list = []
 _sparks: list = []
+
+# Simple in-memory cache for market data (5 min TTL)
+_market_cache: dict = {"data": None, "fetched_at": 0}
+_MARKET_TTL = 300  # seconds
+
+
+def _fetch_market_data() -> str:
+    """Fetch live prices from CoinGecko. Returns formatted string for system prompt."""
+    now = time.time()
+    if _market_cache["data"] and (now - _market_cache["fetched_at"]) < _MARKET_TTL:
+        return _market_cache["data"]
+    try:
+        req = urllib.request.Request(
+            COINGECKO_URL,
+            headers={"User-Agent": "GodLocal/1.0", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            raw = json.loads(resp.read())
+        lines = []
+        names = {
+            "bitcoin": "BTC",
+            "ethereum": "ETH",
+            "solana": "SOL",
+            "binancecoin": "BNB",
+            "sui": "SUI",
+        }
+        for coin_id, sym in names.items():
+            d = raw.get(coin_id, {})
+            price = d.get("usd", "?")
+            chg = d.get("usd_24h_change", 0)
+            cap = d.get("usd_market_cap", 0)
+            sign = "+" if chg and chg >= 0 else ""
+            cap_b = f"{cap/1e9:.1f}B" if cap else "?"
+            lines.append(f"  {sym}: ${price:,.2f} ({sign}{chg:.2f}% 24h) mcap ${cap_b}")
+        result = "Live market data (CoinGecko, UTC " + datetime.datetime.utcnow().strftime("%H:%M") + "):\n" + "\n".join(lines)
+        _market_cache["data"] = result
+        _market_cache["fetched_at"] = now
+        return result
+    except Exception as e:
+        return f"Market data unavailable ({e})"
 
 
 def _groq_chat(prompt: str) -> str:
@@ -23,15 +70,18 @@ def _groq_chat(prompt: str) -> str:
     if not key:
         raise ValueError("GROQ_API_KEY not set")
     today = datetime.datetime.utcnow().strftime("%B %d, %Y")
+    market = _fetch_market_data()
     payload = json.dumps({
         "model": GROQ_MODEL,
         "messages": [
             {
                 "role": "system",
                 "content": (
-                    f"You are GodLocal, an autonomous AI trading agent. "
-                    f"Today's date is {today} (UTC). "
-                    "Analyze on-chain data, whale movements, and market signals. "
+                    f"You are GodLocal, an autonomous AI trading agent.\n"
+                    f"Today's date: {today} (UTC).\n"
+                    f"{market}\n"
+                    "Use this live data when answering. "
+                    "Analyze whale movements and market signals. "
                     "Be concise and direct. Answer in the user's language."
                 ),
             },
@@ -46,7 +96,6 @@ def _groq_chat(prompt: str) -> str:
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
-            # Cloudflare bot protection requires a real User-Agent
             "User-Agent": "groq-python/0.21.0",
             "Accept": "application/json",
         },
@@ -59,7 +108,7 @@ def _groq_chat(prompt: str) -> str:
 
 class handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
-        pass  # suppress access logs
+        pass
 
     def _send_json(self, body: dict, status: int = 200):
         enc = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -90,6 +139,9 @@ class handler(BaseHTTPRequestHandler):
                 "thoughts": _thoughts[-5:],
                 "ts": int(time.time()),
             })
+        elif p == "/market":
+            # Expose raw market data endpoint
+            self._send_json({"market": _fetch_market_data(), "ts": int(time.time())})
         else:
             self._send_json({"error": "not found"}, 404)
 
