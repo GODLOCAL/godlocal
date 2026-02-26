@@ -84,6 +84,13 @@ class handler(BaseHTTPRequestHandler):
                 "thoughts": _thoughts[-5:],
                 "ts": int(time.time()),
             })
+        elif p == "/debug-env":
+            key = os.environ.get("GROQ_API_KEY", "")
+            self._send_json({
+                "groq_key_present": bool(key),
+                "groq_key_prefix": key[:12] if key else "",
+                "groq_key_len": len(key),
+            })
         else:
             self._send_json({"error": "not found"}, 404)
 
@@ -102,7 +109,8 @@ class handler(BaseHTTPRequestHandler):
             if not prompt:
                 self._send_json({"error": "prompt required"}, 400)
                 return
-            if not os.environ.get("GROQ_API_KEY"):
+            key = os.environ.get("GROQ_API_KEY", "")
+            if not key:
                 self._send_json({"error": "GROQ_API_KEY not configured"}, 503)
                 return
             try:
@@ -112,7 +120,12 @@ class handler(BaseHTTPRequestHandler):
                 _thoughts = _thoughts[-20:]
                 self._send_json({"response": text, "model": GROQ_MODEL})
             except urllib.error.HTTPError as e:
-                self._send_json({"error": f"Groq API error {e.code}"}, 500)
+                err_body = ""
+                try:
+                    err_body = e.read().decode("utf-8", errors="replace")[:500]
+                except Exception:
+                    pass
+                self._send_json({"error": f"Groq HTTP {e.code}", "detail": err_body, "key_prefix": key[:12]}, 500)
             except Exception as e:
                 self._send_json({"error": str(e)}, 500)
         else:
