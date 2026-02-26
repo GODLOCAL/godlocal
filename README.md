@@ -1,202 +1,183 @@
-![GodLocal](https://raw.githubusercontent.com/GODLOCAL/godlocal/main/assets/logo-banner.jpg)
-
 # GodLocal
 
-**Your AI. Your machine. Your soul. No cloud.**
+> **Your AI. Your machine.**
 
-GodLocal is a sovereign local AI agent that runs entirely on your own hardware.  
-Not an API wrapper. Not a chatbot. A living system with a soul, memory, and tools — that gets smarter while you sleep.
+[![Deploy](https://img.shields.io/badge/Vercel-LIVE-brightgreen?logo=vercel)](https://godlocal.vercel.app)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Model](https://img.shields.io/badge/Groq-llama--3.3--70b-orange)](https://groq.com)
 
-```bash
-python godlocal_v5.py
-```
+GodLocal is an **open-source AI inference platform** that lets you run powerful AI entirely on your own machine — or in hybrid mode. No subscriptions, no data leaving your device, no dependency on centralized cloud.
 
 ---
 
-## Why
+## What it is
 
-| Cloud AI (GPT, Claude) | GodLocal |
+| Feature | Details |
 |---|---|
-| Your data leaves your machine | Zero egress, zero cloud |
-| $20–200/mo subscription | One-time model download |
-| Personality set by the company | You define the soul |
-| Tools limited to what they allow | Any tool you can code |
-| Gets dumber if you stop paying | Memory consolidates nightly |
+| **4-tier inference stack** | WASM → Groq → Cerebras → AirLLM |
+| **Peak speed** | ~17,000 tokens/sec (Taalas HC1 spec) |
+| **iPhone support** | CoreML + ANE — real on-device speed |
+| **Autonomous agents** | ReAct loop, tool calling, cron ticks — no constant supervision |
+| **API surface** | 18+ endpoints: OSINT, SparkNet, Solana CLI, kill switch, market data |
+| **Codebase** | ~2,900 lines — clean, auditable, zero vendor lock-in |
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────┐
-│               SOUL                   │
-│   soul/*.md — who your AI is         │
-│   "I am a cold precise quant..."     │
-└────────────────┬─────────────────────┘
-                 │
-┌────────────────▼─────────────────────┐
-│               BRAIN                  │
-│   AirLLM (layer-by-layer, any RAM)   │
-│   or Ollama (faster, daemon mode)    │
-└────────────────┬─────────────────────┘
-                 │
-┌────────────────▼─────────────────────┐
-│          BODY (tools)                │
-│  Files · Calendar · Shell · Web      │
-│  Speech · MRI · Custom plugins       │
-└────────────────┬─────────────────────┘
-                 │
-┌────────────────▼─────────────────────┐
-│               SLEEP                  │
-│  Nightly memory consolidation        │
-│  Hippocampal replay → long-term      │
-└──────────────────────────────────────┘
++---------------------------------------------------+
+|               INFERENCE TIERS                     |
+|                                                   |
+|  WASM      -> micro tasks, <50 tokens, offline    |
+|  Groq      -> 270-875 tok/s, cloud burst          |
+|  Cerebras  -> ~3,000 tok/s, low latency           |
+|  AirLLM    -> any model, any RAM, layer-by-layer  |
++---------------------+-----------------------------+
+                      |
++---------------------v-----------------------------+
+|                 AGENT CORE                        |
+|                                                   |
+|  ReAct loop   -> think -> tool -> observe -> loop |
+|  SparkNet     -> Q-learning signal scoring         |
+|  /agent/tick  -> autonomous market cycle           |
+|  kill switch  -> circuit breaker for xzero        |
++---------------------+-----------------------------+
+                      |
++---------------------v-----------------------------+
+|            TOOLS (18+ endpoints)                  |
+|                                                   |
+|  /think         -> ReAct agent (llama-3.3-70b)    |
+|  /agent/tick    -> autonomous analysis cycle       |
+|  /market        -> live BTC/ETH/SOL/BNB/SUI        |
+|  /status        -> kill switch + circuit breaker   |
+|  /mobile/*      -> iPhone PWA control surface     |
++---------------------+-----------------------------+
+                      |
++---------------------v-----------------------------+
+|             iPhone (CoreML + ANE)                 |
+|                                                   |
+|  PWA at godlocal.vercel.app                       |
+|  NexaSDK  MobileOBridge  AudioBridgeMLX           |
+|  SwiftUI XZeroControlView                         |
++---------------------------------------------------+
 ```
 
 ---
 
-## What's New in v5
-
-- **ImageGen** — Stable Diffusion / SDXL-Turbo / Flux (local, no API)
-- **VideoGen** — CogVideoX-2b text-to-video (4-6s clips)
-- **AppGen** — Build full apps from descriptions (DeepSeek-Coder / Qwen-Coder)
-- **AudioGen** — Bark TTS + MusicGen (multilingual, music clips)
-- **KnowledgeBase** — Import URLs, PDFs, YouTube → long-term memory
-- **SecretsVault** — Encrypted local secrets (Fernet AES-128)
-- **MultiAgentRunner** — Parallel sub-agents with different souls
-- **OCREngine** — Image/PDF text extraction (Tesseract)
-- **SolanaDEX** — Jupiter API: prices + swap quotes (no API key)
-
----
-
-## Quickstart
+## Quick Start
 
 ```bash
-# 1. Clone
-git clone https://github.com/GODLOCAL/godlocal
+git clone https://github.com/GODLOCAL/godlocal.git
 cd godlocal
-
-# 2. Install
-pip install chromadb sentence-transformers fastapi uvicorn
-
-# 3. Choose your brain:
-# Option A — Ollama (recommended, faster)
-brew install ollama && ollama pull qwen2.5:7b
-
-# Option B — AirLLM (any VRAM, huge models on small hardware)
-pip install airllm
-
-# 4. Run
-python godlocal_v5.py
-# → http://localhost:8000/docs
+export GROQ_API_KEY=your_key_here
+python api/index.py
 ```
 
-Or with Docker:
+Or hit the live deployment:
+
 ```bash
-cp .env.example .env
-docker-compose up -d
-docker exec godlocal-ollama ollama pull qwen2.5:7b
+# Ask the agent
+curl -X POST https://godlocal.vercel.app/think \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Analyse current BTC market and assess risk"}'
+
+# Autonomous tick — 5 tools, sparks, kill switch decision
+curl -X POST https://godlocal.vercel.app/agent/tick
+
+# Live prices
+curl https://godlocal.vercel.app/market
 ```
 
 ---
 
-## Soul Files
+## Agent Tools
 
-A soul is a markdown file that defines who your AI is.
-
-```
-godlocal_data/souls/
-├── default.md    # calm, precise, private assistant
-├── warrior.md    # X-ZERO — cold Solana quant agent
-└── sovereign.md  # full autonomy, max agency
-```
-
-**Switch souls at runtime:**
-```bash
-curl -X POST http://localhost:8000/souls/load -d '{"soul_name": "warrior"}'
-```
-
-Create your own using `god_soul.example.md` as template.
+| Tool | What it does |
+|---|---|
+| `get_market_data` | Live BTC/ETH/SOL/BNB/SUI prices (CoinGecko, 5-min cache) |
+| `get_system_status` | Kill switch state, circuit breaker, consecutive losses |
+| `get_recent_thoughts` | Agent's own recent analysis history |
+| `set_kill_switch` | Enable/disable xzero trading — agent decides autonomously |
+| `add_spark` | Log trading signal to SparkNet with confidence score |
 
 ---
 
-## REST API
+## Model Fallback Chain
+
+Rate limits handled automatically — no 429 errors reach the user:
 
 ```
-GET  /status              — capabilities, current soul, device
-POST /chat                — send a message
-POST /create/image        — generate image (Stable Diffusion)
-POST /create/video        — generate video (CogVideoX)
-POST /create/app          — build an app from description
-POST /create/audio        — TTS or music generation
-POST /execute             — run whitelisted shell command
-POST /sleep               — trigger memory consolidation
-GET  /souls               — list souls
-POST /souls/load          — switch soul
-POST /knowledge/import    — import URL/PDF/YouTube to memory
-POST /solana/price        — token prices (Jupiter)
-POST /solana/quote        — swap quote (Jupiter)
-GET  /docs                — Swagger UI
+llama-3.3-70b-versatile   <- primary (best reasoning)
+        | 429
+llama-3.1-8b-instant      <- fallback (~483 tok/s)
+        | 429
+llama3-8b-8192            <- emergency
 ```
 
 ---
 
-## Sleep Cycle
+## Inference Speed Benchmarks
 
-GodLocal consolidates memories every night at 01:00:
-
-```python
-god.run_sleep_cycle()
-# or: POST /sleep
-```
-
-Samples recent memories → LLM extracts insights → promotes to long-term ChromaDB.  
-Mimics hippocampal replay during slow-wave sleep. The model gets *wiser* — not just bigger.
+| Model | Speed | Use case |
+|---|---|---|
+| Taalas HC1 | ~17,000 tok/s | WASM tier (spec) |
+| Cerebras llama3.1-8b | ~3,000 tok/s | Micro tasks |
+| Groq gpt-oss-20b | ~875 tok/s | Summarize / fast |
+| Groq llama-3.1-8b | ~483 tok/s | Classify |
+| Groq llama-3.3-70b | ~270 tok/s | Full reasoning |
+| AirLLM | CPU/RAM dependent | On-device, offline |
 
 ---
 
-## Support
+## iPhone / PWA
 
-| Method | Link |
-|--------|------|
-| ☕ Ko-fi | [ko-fi.com/godlocal](https://ko-fi.com/godlocal) |
-| 🪙 SOL | `EWcSFdC3eERL6mAbwbdX3W9eFfYZJbFvaix1J3JcGM1r` |
-| 📜 Commercial License | [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) |
-| 🌐 Website | [godlocal.ai](https://godlocal.ai) *(coming soon)* |
+Add to Home Screen via Safari — works as a native app:
+
+```
+https://godlocal.vercel.app/static/pwa/index.html
+```
+
+Tabs: **Status** · **Think** · **SparkNet** · **Controls**
+PWA polls every 5 seconds. Kill switch toggle is one tap.
+
+---
+
+## Environment Variables
+
+```env
+GROQ_API_KEY=           # Required — get at console.groq.com
+CEREBRAS_API_KEY=       # Optional — Cerebras Inference
+XZERO_KILL_SWITCH=      # true/false — default false
+XZERO_MAX_DRAWDOWN_PCT=
+XZERO_MAX_CONSECUTIVE_L=
+XZERO_DAILY_LOSS_SOL=
+```
 
 ---
 
 ## Roadmap
 
-- [x] v5 — ImageGen, VideoGen, AppGen, AudioGen, KnowledgeBase, SecretsVault, MultiAgentRunner, OCR, SolanaDEX
-- [ ] v5.1 — ConnectorsModule (Composio SDK, 500+ service integrations)
-- [ ] v5.2 — Computer Use + TradingView webhooks
-- [ ] v5.3 — Notifications, email, translate
-- [ ] X100 OASIS integration (archetype soul → $X100 token gate)
+- [x] ReAct agent loop with tool calling
+- [x] Live market data (CoinGecko)
+- [x] Model fallback chain (429 protection)
+- [x] iPhone PWA
+- [x] SparkNet Q-learning signal scoring
+- [ ] Vercel Cron -> /agent/tick every 5 min
+- [ ] VPS deploy (Hetzner CAX11)
+- [ ] godlocal.io domain
+- [ ] Taalas HC1 API key -> 17k tok/s benchmark
+- [ ] On-device CoreML (NexaSDK)
+
+---
+
+## Community
+
+Telegram: [@godlocalai](https://t.me/godlocalai)
+Twitter: [@kitbtc](https://twitter.com/kitbtc)
 
 ---
 
 ## License
 
-**AGPL-3.0** for open-source use.  
-**Commercial License** for closed-source / SaaS / enterprise.  
-See [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md).
-
----
-
-*Built by Rostyslav Oliinyk*  
-*Part of the [X100 OASIS](https://x100-app.vercel.app) ecosystem*
-
----
-
-## Mobile — iPhone On-Device AI
-
-Run LFM2 24B or PARO 4B entirely on iPhone 17 Pro (A19 Pro, 12GB RAM). No cloud.
-
-```bash
-cd mobile && ./setup_nexa.sh   # downloads NexaSdk.xcframework + activates code
-```
-
-Then drag `NexaSdk.xcframework` into Xcode → **Embed & Sign** → **Cmd+R**.
-
-→ [Full mobile setup guide](mobile/README.md) | ~40 tok/s LFM2 / ~60 tok/s PARO 4B
+MIT — use it, fork it, ship it.
