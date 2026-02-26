@@ -1,0 +1,33 @@
+# Exclude heavy ML codebase from Vercel bundle
+# Only api/ and static/ are needed for the edge deployment
+
+agents/
+models/
+workspace/
+tests/
+docs/
+scripts/
+mobile/
+godlocal_v*.py
+*_bridge.py
+*_connector.py
+*_bus.py
+*_pipe.py
+*_probe.py
+sparknet_*.py
+xzero_*.py
+consciousness_*.py
+reasoning_*.py
+tiered_*.py
+harper_*.py
+requirements.txt
+requirements-dev.txt
+setup.py
+setup.cfg
+pyproject.toml
+*.gguf
+*.onnx
+*.bin
+*.pt
+*.pth
+*.safetensors
