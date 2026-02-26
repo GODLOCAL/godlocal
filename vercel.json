@@ -5,6 +5,12 @@
       "maxDuration": 300
     }
   },
+  "crons": [
+    {
+      "path": "/agent/tick",
+      "schedule": "*/15 * * * *"
+    }
+  ],
   "routes": [
     { "src": "^/static/(.*)", "dest": "/static/$1" },
     { "src": "^/(.*)", "dest": "/api/index.py" }
