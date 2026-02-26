@@ -5,6 +5,7 @@ Groq called via urllib (no groq package needed)
 import json
 import os
 import time
+import datetime
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler
@@ -21,13 +22,15 @@ def _groq_chat(prompt: str) -> str:
     key = os.environ.get("GROQ_API_KEY", "")
     if not key:
         raise ValueError("GROQ_API_KEY not set")
+    today = datetime.datetime.utcnow().strftime("%B %d, %Y")
     payload = json.dumps({
         "model": GROQ_MODEL,
         "messages": [
             {
                 "role": "system",
                 "content": (
-                    "You are GodLocal, an autonomous AI trading agent. "
+                    f"You are GodLocal, an autonomous AI trading agent. "
+                    f"Today's date is {today} (UTC). "
                     "Analyze on-chain data, whale movements, and market signals. "
                     "Be concise and direct. Answer in the user's language."
                 ),
@@ -59,9 +62,9 @@ class handler(BaseHTTPRequestHandler):
         pass  # suppress access logs
 
     def _send_json(self, body: dict, status: int = 200):
-        enc = json.dumps(body).encode()
+        enc = json.dumps(body, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "*")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
