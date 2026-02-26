@@ -222,7 +222,7 @@ def _groq_request(messages: list, tools=None, model_override: str | None = None)
 
 
 # ── ReAct agent loop ──────────────────────────────────────────────────────────
-def _agent_loop(user_prompt: str, history: list | None = None, max_steps: int = 5) -> dict:
+def _agent_loop(user_prompt: str, history: list | None = None, max_steps: int = 8) -> dict:
     today  = datetime.datetime.utcnow().strftime("%B %d, %Y")
     market = _fetch_market_text()
     system = (
@@ -230,8 +230,13 @@ def _agent_loop(user_prompt: str, history: list | None = None, max_steps: int = 
         f"Today: {today} (UTC).\n"
         f"{market}\n\n"
         "Tools available: get_market_data, get_system_status, get_recent_thoughts, set_kill_switch, add_spark.\n"
-        "Rules: think step-by-step; use tools to gather facts; log non-trivial signals as sparks; "
-        "if extreme volatility detected proactively trigger kill switch; be concise; answer in user's language."
+        "Rules:\n"
+        "- Think step-by-step; use tools to gather facts before answering.\n"
+        "- Only call tools when genuinely needed (e.g. skip get_market_data for simple greetings).\n"
+        "- Never repeat the same answer twice. If the user asks a follow-up, give NEW information.\n"
+        "- Log non-trivial signals as sparks; proactively trigger kill switch on extreme volatility.\n"
+        "- Be concise. Always answer in the user\'s language.\n"
+        "- After tool results are available, synthesize and give a FINAL answer — do not call tools again."
     )
     messages = [{"role": "system", "content": system}]
     # Trim history to last 6 turns to stay under TPM
@@ -243,14 +248,19 @@ def _agent_loop(user_prompt: str, history: list | None = None, max_steps: int = 
     model_used  = MODEL_CHAIN[0]
 
     for step in range(max_steps):
-        resp, model_used = _groq_request(messages, tools=AGENT_TOOLS)
+        # On last step: force text response — no more tools
+        force_text = (step == max_steps - 1)
+        resp, model_used = _groq_request(
+            messages,
+            tools=None if force_text else AGENT_TOOLS,
+        )
         choice  = resp["choices"][0]
         message = choice["message"]
         finish  = choice["finish_reason"]
 
         messages.append(message)
 
-        if finish == "tool_calls" and message.get("tool_calls"):
+        if not force_text and finish == "tool_calls" and message.get("tool_calls"):
             for tc in message["tool_calls"]:
                 fn     = tc["function"]["name"]
                 args   = json.loads(tc["function"]["arguments"] or "{}")
@@ -262,10 +272,11 @@ def _agent_loop(user_prompt: str, history: list | None = None, max_steps: int = 
                     "content":      result,
                 })
         else:
-            text = message.get("content", "")
+            text = message.get("content", "") or ""
             return {"response": text, "steps": steps_taken, "model": model_used}
 
-    return {"response": "Agent reached max steps.", "steps": steps_taken, "model": model_used}
+    # Should never reach here, but just in case
+    return {"response": "Готово.", "steps": steps_taken, "model": model_used}
 
 
 # ── HTTP handler ──────────────────────────────────────────────────────────────
