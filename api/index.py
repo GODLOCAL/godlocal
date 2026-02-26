@@ -3,14 +3,12 @@ GodLocal Edge API — Vercel serverless (standalone, no heavy deps)
 Endpoints: /health /status /think /mobile/status /mobile/kill-switch
 """
 import os
-import json
 import time
-from typing import Optional, Dict, Any
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from groq import Groq
 
 app = FastAPI(title="GodLocal Edge API", version="1.0.0")
 
@@ -22,25 +20,34 @@ app.add_middleware(
 )
 
 # In-memory state (resets on cold start — VPS handles persistence)
-_kill_switch = os.environ.get("XZERO_KILL_SWITCH", "false").lower() == "true"
+_kill_switch: bool = os.environ.get("XZERO_KILL_SWITCH", "false").lower() == "true"
 _thoughts: list = []
 _sparks: list = []
 
-groq_client = None
+_groq_client: Any = None
 GROQ_MODEL = "llama-3.1-8b-instant"
 
+
 def get_groq():
-    global groq_client
-    if groq_client is None:
+    global _groq_client
+    if _groq_client is None:
         key = os.environ.get("GROQ_API_KEY")
         if key:
-            groq_client = Groq(api_key=key)
-    return groq_client
+            try:
+                from groq import Groq  # lazy import — avoid top-level crash
+                _groq_client = Groq(api_key=key)
+            except Exception:
+                pass
+    return _groq_client
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "env": os.environ.get("GODLOCAL_ENV", "local"), "ts": int(time.time())}
+    return {
+        "status": "ok",
+        "env": os.environ.get("GODLOCAL_ENV", "production"),
+        "ts": int(time.time()),
+    }
 
 
 @app.get("/status")
@@ -111,13 +118,17 @@ async def think(request: Request):
             temperature=0.7,
         )
         response_text = completion.choices[0].message.content
-        thought = {"thought": response_text, "prompt": prompt, "timestamp": int(time.time() * 1000)}
+        thought = {
+            "thought": response_text,
+            "prompt": prompt,
+            "timestamp": int(time.time() * 1000),
+        }
         _thoughts.append(thought)
-        _thoughts = _thoughts[-20:]  # keep last 20
+        _thoughts = _thoughts[-20:]
         return {"response": response_text, "model": GROQ_MODEL}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-# Vercel handler
+# Vercel ASGI handler
 handler = app
