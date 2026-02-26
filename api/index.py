@@ -44,6 +44,91 @@ _sparks:   list = []
 _market_cache: dict = {"data": None, "raw": None, "fetched_at": 0}
 _MARKET_TTL = 300
 
+
+# ── Composio tools (active when COMPOSIO_API_KEY is set) ─────────────────────
+_COMPOSIO_KEY = os.environ.get("COMPOSIO_API_KEY", "")
+_COMPOSIO_URL = "https://backend.composio.dev/api/v1"
+
+COMPOSIO_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "post_tweet",
+            "description": "Post a tweet to @kitbtc Twitter account via Composio",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Tweet content (max 280 chars)"}
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_telegram",
+            "description": "Send a message to the GodLocal Telegram channel @godlocalai",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "Message content"}
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_github_issue",
+            "description": "Create a GitHub issue in GODLOCAL/godlocal repo",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title":  {"type": "string"},
+                    "body":   {"type": "string"},
+                },
+                "required": ["title", "body"],
+            },
+        },
+    },
+]
+
+
+def _composio_request(method: str, path: str, body: dict | None = None) -> dict:
+    """Generic Composio REST call."""
+    url = f"{_COMPOSIO_URL}{path}"
+    data_bytes = json.dumps(body).encode() if body else None
+    req = urllib.request.Request(
+        url,
+        data=data_bytes,
+        headers={
+            "x-api-key": _COMPOSIO_KEY,
+            "Content-Type": "application/json",
+            "User-Agent": "GodLocal/1.0",
+        },
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body_txt = ""
+        try: body_txt = e.read().decode("utf-8", errors="replace")[:200]
+        except Exception: pass
+        return {"error": f"HTTP {e.code}", "detail": body_txt}
+    except Exception as ex:
+        return {"error": str(ex)}
+
+
+def _composio_execute_tool(app: str, action: str, params: dict) -> dict:
+    """Execute a Composio action via REST API."""
+    return _composio_request("POST", f"/actions/{action}/execute", {
+        "appName": app,
+        "input": params,
+    })
+
 # ── Agent tools ──────────────────────────────────────────────────────────────
 AGENT_TOOLS = [
     {
@@ -131,6 +216,23 @@ def _execute_tool(name: str, args: dict) -> str:
         _sparks.append(spark)
         _sparks = _sparks[-50:]
         return json.dumps({"ok": True, "spark": spark})
+    elif name == "post_tweet" and _COMPOSIO_KEY:
+        result = _composio_execute_tool("twitter", "TWITTER_CREATION_OF_A_POST", {"text": args.get("text", "")})
+        return json.dumps(result, ensure_ascii=False)
+    elif name == "send_telegram" and _COMPOSIO_KEY:
+        result = _composio_execute_tool("telegram", "TELEGRAM_SEND_MESSAGE", {
+            "chat_id": "@godlocalai",
+            "text": args.get("message", ""),
+        })
+        return json.dumps(result, ensure_ascii=False)
+    elif name == "create_github_issue" and _COMPOSIO_KEY:
+        result = _composio_execute_tool("github", "GITHUB_CREATE_AN_ISSUE", {
+            "owner": "GODLOCAL",
+            "repo": "godlocal",
+            "title": args.get("title", ""),
+            "body": args.get("body", ""),
+        })
+        return json.dumps(result, ensure_ascii=False)
     return json.dumps({"error": f"unknown tool: {name}"})
 
 
@@ -247,12 +349,15 @@ def _agent_loop(user_prompt: str, history: list | None = None, max_steps: int = 
     steps_taken = []
     model_used  = MODEL_CHAIN[0]
 
+    # Merge Composio tools if API key available
+    active_tools = AGENT_TOOLS + (COMPOSIO_TOOLS if _COMPOSIO_KEY else [])
+
     for step in range(max_steps):
         # On last step: force text response — no more tools
         force_text = (step == max_steps - 1)
         resp, model_used = _groq_request(
             messages,
-            tools=None if force_text else AGENT_TOOLS,
+            tools=None if force_text else active_tools,
         )
         choice  = resp["choices"][0]
         message = choice["message"]

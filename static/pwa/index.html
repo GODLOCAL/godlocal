@@ -267,6 +267,7 @@
 
   <!-- THINK TAB -->
   <div class="content" id="tab-think">
+    <div style="font-size:11px;color:var(--muted);text-align:right;padding:4px 8px 0;" id="modelBadge"></div>
     <div class="chat-wrap">
       <div class="chat-messages" id="chatMessages">
         <div class="msg ai">
@@ -390,7 +391,7 @@
       if (!msg) return;
       input.value = '';
       addChatMsg('user', msg);
-      const thinking = addChatMsg('ai', '...');
+      const thinkingBubble = addChatMsg('ai', '⏳ Thinking...');
       try {
         const r = await fetch(BASE + '/think', {
           method: 'POST',
@@ -398,10 +399,28 @@
           body: JSON.stringify({prompt: msg})
         });
         const d = await r.json();
-        thinking.textContent = d.response || d.thought || d.result || JSON.stringify(d);
+        // Update model badge
+        if (d.model) {
+          document.getElementById('modelBadge').textContent = '⚡ ' + d.model;
+        }
+        // Show steps if available
+        const steps = d.steps || [];
+        if (steps.length > 0) {
+          let stepsHtml = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">🔧 ' + steps.length + ' step' + (steps.length > 1 ? 's' : '') + ':</div>';
+          stepsHtml += '<div style="font-size:11px;background:rgba(255,255,255,0.04);border-radius:6px;padding:6px 8px;margin-bottom:8px;">';
+          steps.forEach((s, i) => {
+            const preview = s.result_preview ? ' → ' + s.result_preview.substring(0, 60) + (s.result_preview.length > 60 ? '…' : '') : '';
+            stepsHtml += '<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.06);">step ' + (i+1) + ': <b>' + s.tool + '</b>' + preview + '</div>';
+          });
+          stepsHtml += '</div>';
+          stepsHtml += '<div>' + (d.response || d.thought || d.result || JSON.stringify(d)) + '</div>';
+          thinkingBubble.innerHTML = stepsHtml;
+        } else {
+          thinkingBubble.textContent = d.response || d.thought || d.result || JSON.stringify(d);
+        }
       } catch(e) {
-        thinking.textContent = 'Error: ' + e.message;
-        thinking.style.color = 'var(--red)';
+        thinkingBubble.textContent = 'Error: ' + e.message;
+        thinkingBubble.style.color = 'var(--red)';
       }
       document.getElementById('chatMessages').scrollTop = 999999;
     }
