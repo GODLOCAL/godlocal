@@ -1,1 +1,427 @@
-PWA_CONTENT
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="GodLocal" />
+  <link rel="manifest" href="/static/pwa/manifest.json" />
+  <title>GodLocal</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --border: #1e1e2e;
+      --accent: #7c3aed;
+      --accent2: #06b6d4;
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+      min-height: 100vh;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .header {
+      padding: 16px 20px 12px;
+      padding-top: calc(env(safe-area-inset-top) + 16px);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+    .header h1 span { color: var(--accent); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 6px; }
+    .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.red { background: var(--red); }
+    .tabs {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      gap: 4px;
+    }
+    .tab {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+    .content { display: none; padding: 16px 20px; }
+    .content.active { display: block; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .status-label { font-size: 13px; color: var(--muted); }
+    .status-val { font-size: 13px; font-weight: 600; }
+    .status-val.green { color: var(--green); }
+    .status-val.red { color: var(--red); }
+    .status-val.yellow { color: var(--yellow); }
+    .kill-switch {
+      width: 100%;
+      padding: 16px;
+      border-radius: 12px;
+      border: none;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    .kill-switch.inactive {
+      background: linear-gradient(135deg, #1e1e2e, #2a1a3e);
+      border: 2px solid var(--accent);
+      color: var(--accent);
+    }
+    .kill-switch.active {
+      background: linear-gradient(135deg, #7f1d1d, #991b1b);
+      border: 2px solid var(--red);
+      color: #fff;
+      box-shadow: 0 0 20px rgba(239,68,68,0.4);
+    }
+    .spark-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .spark-item:last-child { border-bottom: none; }
+    .spark-name { font-size: 13px; font-weight: 500; }
+    .spark-score {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .spark-high { background: rgba(16,185,129,0.15); color: var(--green); }
+    .spark-mid { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .spark-low { background: rgba(100,116,139,0.15); color: var(--muted); }
+    .thought-item {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .thought-item:last-child { border-bottom: none; }
+    .thought-text { font-size: 13px; line-height: 1.5; color: var(--text); }
+    .thought-time { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .chat-wrap { display: flex; flex-direction: column; height: calc(100vh - 130px); }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 0;
+    }
+    .msg {
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .msg.user { align-items: flex-end; }
+    .msg.ai { align-items: flex-start; }
+    .msg-bubble {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .msg.user .msg-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .msg.ai .msg-bubble { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .chat-input-wrap {
+      display: flex;
+      gap: 8px;
+      padding: 12px 0;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+    .chat-input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 10px 16px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    .chat-input:focus { border-color: var(--accent); }
+    .send-btn {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(124,58,237,0.15);
+      color: var(--accent);
+      margin-left: 6px;
+    }
+    .error-msg { color: var(--red); font-size: 12px; text-align: center; padding: 8px; }
+    .loading { color: var(--muted); font-size: 12px; text-align: center; padding: 8px; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>God<span>Local</span></h1>
+    <div id="statusIndicator">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText" style="font-size:12px;color:var(--muted)">connecting...</span>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('status')">Status</div>
+    <div class="tab" onclick="switchTab('sparks')">SparkNet</div>
+    <div class="tab" onclick="switchTab('thoughts')">Mind</div>
+    <div class="tab" onclick="switchTab('think')">Think</div>
+  </div>
+
+  <!-- STATUS TAB -->
+  <div class="content active" id="tab-status">
+    <button class="kill-switch inactive" id="killBtn" onclick="toggleKillSwitch()">
+      ☠ KILL SWITCH — OFF
+    </button>
+    <div class="card" id="cbCard">
+      <div class="card-title">Circuit Breaker</div>
+      <div class="status-row">
+        <span class="status-label">State</span>
+        <span class="status-val" id="cbState">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Consecutive Losses</span>
+        <span class="status-val" id="cbLosses">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Daily Loss (SOL)</span>
+        <span class="status-val" id="cbDailyLoss">—</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">System</div>
+      <div class="status-row">
+        <span class="status-label">API</span>
+        <span class="status-val" id="apiStatus">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Last Update</span>
+        <span class="status-val" id="lastUpdate" style="font-size:11px;">—</span>
+      </div>
+    </div>
+    <div id="statusError"></div>
+  </div>
+
+  <!-- SPARKS TAB -->
+  <div class="content" id="tab-sparks">
+    <div class="card">
+      <div class="card-title">SparkNet — Top Signals</div>
+      <div id="sparkList"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- THOUGHTS TAB -->
+  <div class="content" id="tab-thoughts">
+    <div class="card">
+      <div class="card-title">ConsciousnessLoop — Recent Thoughts</div>
+      <div id="thoughtList"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- THINK TAB -->
+  <div class="content" id="tab-think">
+    <div class="chat-wrap">
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg ai">
+          <div class="msg-bubble">Ask me anything about GodLocal status, trades, or signals.</div>
+        </div>
+      </div>
+      <div class="chat-input-wrap">
+        <input class="chat-input" id="chatInput" placeholder="Ask GodLocal..." onkeydown="if(event.key==='Enter')sendChat()" />
+        <button class="send-btn" onclick="sendChat()">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BASE = 'https://godlocal.vercel.app';
+    let killActive = false;
+    let pollTimer = null;
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach((t,i) => {
+        const names = ['status','sparks','thoughts','think'];
+        t.classList.toggle('active', names[i] === name);
+      });
+      document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+    }
+
+    async function fetchStatus() {
+      try {
+        const r = await fetch(BASE + '/mobile/status');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        updateUI(d);
+        document.getElementById('statusDot').className = 'dot green';
+        document.getElementById('statusText').textContent = 'live';
+        document.getElementById('apiStatus').textContent = 'online';
+        document.getElementById('apiStatus').className = 'status-val green';
+        document.getElementById('statusError').innerHTML = '';
+      } catch(e) {
+        document.getElementById('statusDot').className = 'dot red';
+        document.getElementById('statusText').textContent = 'offline';
+        document.getElementById('apiStatus').textContent = 'offline';
+        document.getElementById('apiStatus').className = 'status-val red';
+        document.getElementById('statusError').innerHTML = '<div class="error-msg">API unreachable — ' + e.message + '</div>';
+      }
+      document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+    }
+
+    function updateUI(d) {
+      // Circuit Breaker
+      const cb = d.circuit_breaker || {};
+      const cbState = document.getElementById('cbState');
+      const tripped = cb.is_tripped || false;
+      cbState.textContent = tripped ? 'TRIPPED ⚠' : 'OK';
+      cbState.className = 'status-val ' + (tripped ? 'red' : 'green');
+      document.getElementById('cbLosses').textContent = cb.consecutive_losses ?? '—';
+      document.getElementById('cbDailyLoss').textContent = cb.daily_loss_sol != null ? cb.daily_loss_sol.toFixed(3) : '—';
+
+      // Kill switch
+      killActive = d.kill_switch_active || false;
+      const btn = document.getElementById('killBtn');
+      if (killActive) {
+        btn.textContent = '☠ KILL SWITCH — ON';
+        btn.className = 'kill-switch active';
+      } else {
+        btn.textContent = '☠ KILL SWITCH — OFF';
+        btn.className = 'kill-switch inactive';
+      }
+
+      // Sparks
+      const sparks = d.sparks || [];
+      const sl = document.getElementById('sparkList');
+      if (sparks.length === 0) {
+        sl.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px;">No signals yet</div>';
+      } else {
+        sl.innerHTML = sparks.slice(0,10).map(s => {
+          const score = s.ema_score ?? s.score ?? 0;
+          const cls = score >= 0.7 ? 'spark-high' : score >= 0.4 ? 'spark-mid' : 'spark-low';
+          return '<div class="spark-item"><span class="spark-name">' + (s.name || s.id || 'Signal') + '</span>'
+            + '<span class="spark-score ' + cls + '">' + (score*100).toFixed(0) + '%</span></div>';
+        }).join('');
+      }
+
+      // Thoughts
+      const thoughts = d.thoughts || [];
+      const tl = document.getElementById('thoughtList');
+      if (thoughts.length === 0) {
+        tl.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px;">No thoughts yet</div>';
+      } else {
+        tl.innerHTML = thoughts.slice(0,5).map(t => {
+          const text = typeof t === 'string' ? t : (t.thought || t.content || JSON.stringify(t));
+          const ts = t.timestamp ? new Date(t.timestamp).toLocaleTimeString() : '';
+          return '<div class="thought-item"><div class="thought-text">' + text + '</div>'
+            + (ts ? '<div class="thought-time">' + ts + '</div>' : '') + '</div>';
+        }).join('');
+      }
+    }
+
+    async function toggleKillSwitch() {
+      const newState = !killActive;
+      const btn = document.getElementById('killBtn');
+      btn.disabled = true;
+      try {
+        const r = await fetch(BASE + '/mobile/kill-switch', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({active: newState})
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        await fetchStatus();
+      } catch(e) {
+        alert('Failed: ' + e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function sendChat() {
+      const input = document.getElementById('chatInput');
+      const msg = input.value.trim();
+      if (!msg) return;
+      input.value = '';
+      addChatMsg('user', msg);
+      const thinking = addChatMsg('ai', '...');
+      try {
+        const r = await fetch(BASE + '/think', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({prompt: msg})
+        });
+        const d = await r.json();
+        thinking.textContent = d.response || d.thought || d.result || JSON.stringify(d);
+      } catch(e) {
+        thinking.textContent = 'Error: ' + e.message;
+        thinking.style.color = 'var(--red)';
+      }
+      document.getElementById('chatMessages').scrollTop = 999999;
+    }
+
+    function addChatMsg(role, text) {
+      const wrap = document.getElementById('chatMessages');
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      bubble.textContent = text;
+      div.appendChild(bubble);
+      wrap.appendChild(div);
+      wrap.scrollTop = 999999;
+      return bubble;
+    }
+
+    // Poll every 5 seconds
+    fetchStatus();
+    setInterval(fetchStatus, 5000);
+  </script>
+</body>
+</html>
