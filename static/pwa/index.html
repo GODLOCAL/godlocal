@@ -1,446 +1,410 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="GodLocal" />
-  <link rel="manifest" href="/static/pwa/manifest.json" />
-  <title>GodLocal</title>
+  <meta name="theme-color" content="#0a0a0f" />
+  <title>GodLocal · Jarvis</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0a0a0f;
-      --surface: #12121a;
-      --border: #1e1e2e;
-      --accent: #7c3aed;
-      --accent2: #06b6d4;
-      --green: #10b981;
-      --red: #ef4444;
-      --yellow: #f59e0b;
-      --text: #e2e8f0;
-      --muted: #64748b;
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0a0a0f;--surface:#111118;--surface2:#16161f;--border:#1e1e2e;
+      --accent:#6366f1;--accent2:#818cf8;--gold:#f59e0b;--green:#22c55e;
+      --red:#ef4444;--muted:#4b5563;--text:#e2e8f0;--textdim:#94a3b8;
+      --radius:14px;--shadow:0 4px 32px rgba(0,0,0,.5);--glow:0 0 24px rgba(99,102,241,.18)
     }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-      min-height: 100vh;
-      padding-bottom: env(safe-area-inset-bottom);
-    }
-    .header {
-      padding: 16px 20px 12px;
-      padding-top: calc(env(safe-area-inset-top) + 16px);
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
-    .header h1 span { color: var(--accent); }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 6px; }
-    .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
-    .dot.red { background: var(--red); }
-    .tabs {
-      display: flex;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 20px;
-      gap: 4px;
-    }
-    .tab {
-      padding: 10px 16px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--muted);
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s;
-    }
-    .tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
-    .content { display: none; padding: 16px 20px; }
-    .content.active { display: block; }
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 12px;
-    }
-    .card-title {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--muted);
-      margin-bottom: 10px;
-    }
-    .status-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 6px;
-    }
-    .status-label { font-size: 13px; color: var(--muted); }
-    .status-val { font-size: 13px; font-weight: 600; }
-    .status-val.green { color: var(--green); }
-    .status-val.red { color: var(--red); }
-    .status-val.yellow { color: var(--yellow); }
-    .kill-switch {
-      width: 100%;
-      padding: 16px;
-      border-radius: 12px;
-      border: none;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.15s;
-      letter-spacing: 0.5px;
-      margin-bottom: 12px;
-    }
-    .kill-switch.inactive {
-      background: linear-gradient(135deg, #1e1e2e, #2a1a3e);
-      border: 2px solid var(--accent);
-      color: var(--accent);
-    }
-    .kill-switch.active {
-      background: linear-gradient(135deg, #7f1d1d, #991b1b);
-      border: 2px solid var(--red);
-      color: #fff;
-      box-shadow: 0 0 20px rgba(239,68,68,0.4);
-    }
-    .spark-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .spark-item:last-child { border-bottom: none; }
-    .spark-name { font-size: 13px; font-weight: 500; }
-    .spark-score {
-      font-size: 12px;
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-weight: 600;
-    }
-    .spark-high { background: rgba(16,185,129,0.15); color: var(--green); }
-    .spark-mid { background: rgba(245,158,11,0.15); color: var(--yellow); }
-    .spark-low { background: rgba(100,116,139,0.15); color: var(--muted); }
-    .thought-item {
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .thought-item:last-child { border-bottom: none; }
-    .thought-text { font-size: 13px; line-height: 1.5; color: var(--text); }
-    .thought-time { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .chat-wrap { display: flex; flex-direction: column; height: calc(100vh - 130px); }
-    .chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 12px 0;
-    }
-    .msg {
-      margin-bottom: 12px;
-      display: flex;
-      flex-direction: column;
-    }
-    .msg.user { align-items: flex-end; }
-    .msg.ai { align-items: flex-start; }
-    .msg-bubble {
-      max-width: 80%;
-      padding: 10px 14px;
-      border-radius: 16px;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-    .msg.user .msg-bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
-    .msg.ai .msg-bubble { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
-    .chat-input-wrap {
-      display: flex;
-      gap: 8px;
-      padding: 12px 0;
-      padding-bottom: calc(12px + env(safe-area-inset-bottom));
-    }
-    .chat-input {
-      flex: 1;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 10px 16px;
-      color: var(--text);
-      font-size: 14px;
-      outline: none;
-    }
-    .chat-input:focus { border-color: var(--accent); }
-    .send-btn {
-      width: 40px; height: 40px;
-      border-radius: 50%;
-      background: var(--accent);
-      border: none;
-      color: #fff;
-      font-size: 18px;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 600;
-      background: rgba(124,58,237,0.15);
-      color: var(--accent);
-      margin-left: 6px;
-    }
-    .error-msg { color: var(--red); font-size: 12px; text-align: center; padding: 8px; }
-    .loading { color: var(--muted); font-size: 12px; text-align: center; padding: 8px; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    html,body{height:100%;width:100%;background:var(--bg);color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;
+      font-size:15px;line-height:1.55;overflow:hidden;-webkit-font-smoothing:antialiased}
+    #app{display:flex;flex-direction:column;height:100dvh;max-width:480px;margin:0 auto;position:relative}
+    #header{padding:14px 18px 10px;display:flex;align-items:center;justify-content:space-between;
+      border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;z-index:10}
+    #header-left{display:flex;align-items:center;gap:10px}
+    #logo{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),#a855f7);border-radius:9px;
+      display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;box-shadow:var(--glow)}
+    #header-title{font-size:15px;font-weight:700}
+    #header-sub{font-size:11px;color:var(--textdim);margin-top:1px}
+    #arch-badge{font-size:11px;padding:3px 9px;border-radius:20px;background:rgba(99,102,241,.15);
+      border:1px solid rgba(99,102,241,.3);color:var(--accent2);cursor:pointer;transition:all .2s;user-select:none}
+    #arch-panel{position:absolute;top:58px;right:18px;background:var(--surface2);border:1px solid var(--border);
+      border-radius:var(--radius);padding:8px;display:none;grid-template-columns:repeat(3,1fr);gap:6px;z-index:100;box-shadow:var(--shadow)}
+    #arch-panel.open{display:grid}
+    .arch-btn{padding:8px 10px;border-radius:9px;background:var(--surface);border:1px solid var(--border);
+      color:var(--textdim);font-size:11px;text-align:center;cursor:pointer;transition:all .2s}
+    .arch-btn:hover,.arch-btn.active{background:rgba(99,102,241,.2);border-color:var(--accent);color:var(--text)}
+    .arch-btn span{display:block;font-size:18px;margin-bottom:2px}
+    #tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+    .tab{flex:1;padding:8px 4px;font-size:11px;font-weight:600;color:var(--muted);text-align:center;
+      cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;letter-spacing:.02em}
+    .tab.active{color:var(--accent2);border-bottom-color:var(--accent)}
+    #main{flex:1;overflow-y:auto;min-height:0}
+    .tab-view{display:none;height:100%}
+    .tab-view.active{display:block}
+    #chat-wrap{display:flex;flex-direction:column;height:100%}
+    #messages{flex:1;overflow-y:auto;padding:16px 14px 8px;display:flex;flex-direction:column;gap:12px}
+    .msg{display:flex;gap:8px;animation:fadeIn .25s ease}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+    .msg.user{flex-direction:row-reverse}
+    .msg-avatar{width:28px;height:28px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;
+      justify-content:center;font-size:13px;margin-top:2px}
+    .msg.user .msg-avatar{background:var(--accent)}
+    .msg.agent .msg-avatar{background:linear-gradient(135deg,#1e293b,#334155)}
+    .msg-bubble{max-width:calc(100% - 44px);padding:9px 13px;border-radius:14px;font-size:14px;line-height:1.5}
+    .msg.user .msg-bubble{background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+    .msg.agent .msg-bubble{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px}
+    .thinking-dots{display:flex;gap:4px;padding:4px 0}
+    .thinking-dots span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:blink 1.2s ease-in-out infinite}
+    .thinking-dots span:nth-child(2){animation-delay:.2s}
+    .thinking-dots span:nth-child(3){animation-delay:.4s}
+    @keyframes blink{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1.1)}}
+    .thinking-step{font-size:11px;color:var(--muted);padding:4px 8px;background:rgba(99,102,241,.07);
+      border-radius:6px;border-left:2px solid var(--accent);margin-bottom:4px;font-style:italic}
+    .intent-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:10px;
+      background:rgba(99,102,241,.12);color:var(--accent2);border:1px solid rgba(99,102,241,.2);margin-bottom:5px}
+    .action-item{margin-top:7px;padding:6px 9px;background:rgba(34,197,94,.08);border-left:2px solid var(--green);
+      border-radius:0 6px 6px 0;font-size:12px;color:#86efac}
+    #input-area{padding:10px 12px 12px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+    #input-row{display:flex;gap:8px;align-items:flex-end}
+    #input-box{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;color:var(--text);font-size:14px;resize:none;outline:none;min-height:42px;
+      max-height:120px;transition:border-color .2s;font-family:inherit;line-height:1.4}
+    #input-box:focus{border-color:var(--accent)}
+    #input-box::placeholder{color:var(--muted)}
+    .ibtn{width:42px;height:42px;border-radius:12px;border:none;cursor:pointer;display:flex;
+      align-items:center;justify-content:center;font-size:18px;transition:all .2s;flex-shrink:0}
+    #send-btn{background:var(--accent);color:#fff}
+    #send-btn:hover{background:var(--accent2);transform:scale(1.05)}
+    #send-btn:disabled{background:var(--muted);cursor:not-allowed;transform:none}
+    #voice-btn{background:var(--surface2);border:1px solid var(--border);color:var(--textdim)}
+    #voice-btn.rec{background:rgba(239,68,68,.2);border-color:var(--red);color:var(--red);animation:pulse .8s ease-in-out infinite}
+    @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+    #quick{display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none}
+    #quick::-webkit-scrollbar{display:none}
+    .qbtn{white-space:nowrap;padding:5px 11px;font-size:11px;border-radius:20px;background:var(--surface2);
+      border:1px solid var(--border);color:var(--textdim);cursor:pointer;transition:all .2s;flex-shrink:0}
+    .qbtn:hover{background:rgba(99,102,241,.15);border-color:var(--accent);color:var(--text)}
+    #projects-view,#memory-view,#signals-view{padding:14px}
+    .pcard{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);
+      padding:14px;margin-bottom:10px;cursor:pointer;transition:all .2s}
+    .pcard:hover{border-color:var(--accent);box-shadow:var(--glow)}
+    .pcard-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .pname{font-size:13px;font-weight:700}
+    .pstatus{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600}
+    .slive{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+    .sbuild{background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3)}
+    .pdesc{font-size:12px;color:var(--textdim);margin-bottom:8px}
+    .pnext{font-size:11px;padding:5px 9px;background:rgba(99,102,241,.08);border-radius:7px;color:var(--accent2)}
+    .pnext::before{content:'-> '}
+    .msec{margin-bottom:16px}
+    .msec-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+      color:var(--muted);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+    .mitem{padding:8px 10px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);
+      font-size:12px;color:var(--textdim);margin-bottom:5px;display:flex;align-items:flex-start;gap:7px}
+    .titem{padding:7px 10px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);
+      font-size:12px;margin-bottom:5px;display:flex;align-items:center;gap:8px;cursor:pointer;transition:all .2s}
+    .tchk{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--muted);flex-shrink:0;transition:all .2s}
+    .titem.done .tchk{background:var(--green);border-color:var(--green)}
+    .titem.done .ttxt{text-decoration:line-through;color:var(--muted)}
+    #mem-input-row{display:flex;gap:8px;margin-top:10px}
+    #mem-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:9px;
+      padding:8px 11px;color:var(--text);font-size:13px;outline:none}
+    #mem-input:focus{border-color:var(--accent)}
+    #mem-save{padding:8px 14px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-size:13px;cursor:pointer}
+    .sig-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .sig-title{font-size:13px;font-weight:700}
+    .scan-btn{font-size:11px;padding:4px 12px;border-radius:20px;background:rgba(245,158,11,.15);
+      border:1px solid rgba(245,158,11,.3);color:var(--gold);cursor:pointer}
+    .scard{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px}
+    .stop{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+    .stoken{font-size:14px;font-weight:700}
+    .sgain{font-size:14px;font-weight:800;color:var(--green)}
+    .sgain.neg{color:var(--red)}
+    .srow{display:flex;gap:14px;font-size:11px;color:var(--textdim)}
+    .spat{margin-top:6px;font-size:11px;color:var(--accent2);background:rgba(99,102,241,.08);padding:4px 8px;border-radius:5px;display:inline-block}
+    .pat-item{padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--textdim);margin-bottom:5px}
+    ::-webkit-scrollbar{width:3px}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);
+      background:var(--surface2);border:1px solid var(--border);padding:8px 16px;border-radius:20px;
+      font-size:12px;color:var(--text);opacity:0;transition:all .3s;pointer-events:none;z-index:999;white-space:nowrap}
+    #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    #cfg-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:flex-end}
+    #cfg-overlay.open{display:flex}
+    #cfg-panel{background:var(--surface);border:1px solid var(--border);border-radius:18px 18px 0 0;
+      padding:20px 18px 32px;width:100%;max-width:480px;margin:0 auto;position:relative}
+    #cfg-panel h2{font-size:15px;font-weight:700;margin-bottom:14px}
+    .cfg-row{margin-bottom:12px}
+    .cfg-lbl{font-size:11px;color:var(--textdim);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+    .cfg-inp{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:9px;
+      padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:monospace}
+    .cfg-inp:focus{border-color:var(--accent)}
+    #cfg-save{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:12px;
+      font-size:15px;font-weight:700;cursor:pointer;margin-top:6px}
+    #cfg-close{position:absolute;top:16px;right:18px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>God<span>Local</span></h1>
-    <div id="statusIndicator">
-      <span class="dot" id="statusDot"></span>
-      <span id="statusText" style="font-size:12px;color:var(--muted)">connecting...</span>
-    </div>
-  </div>
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('status')">Status</div>
-    <div class="tab" onclick="switchTab('sparks')">SparkNet</div>
-    <div class="tab" onclick="switchTab('thoughts')">Mind</div>
-    <div class="tab" onclick="switchTab('think')">Think</div>
-  </div>
-
-  <!-- STATUS TAB -->
-  <div class="content active" id="tab-status">
-    <button class="kill-switch inactive" id="killBtn" onclick="toggleKillSwitch()">
-      ☠ KILL SWITCH — OFF
-    </button>
-    <div class="card" id="cbCard">
-      <div class="card-title">Circuit Breaker</div>
-      <div class="status-row">
-        <span class="status-label">State</span>
-        <span class="status-val" id="cbState">—</span>
-      </div>
-      <div class="status-row">
-        <span class="status-label">Consecutive Losses</span>
-        <span class="status-val" id="cbLosses">—</span>
-      </div>
-      <div class="status-row">
-        <span class="status-label">Daily Loss (SOL)</span>
-        <span class="status-val" id="cbDailyLoss">—</span>
+<div id="app">
+  <div id="header">
+    <div id="header-left">
+      <div id="logo">G</div>
+      <div>
+        <div id="header-title">GodLocal</div>
+        <div id="header-sub">Jarvis &middot; gemini-2.0-flash</div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title">System</div>
-      <div class="status-row">
-        <span class="status-label">API</span>
-        <span class="status-val" id="apiStatus">—</span>
-      </div>
-      <div class="status-row">
-        <span class="status-label">Last Update</span>
-        <span class="status-val" id="lastUpdate" style="font-size:11px;">—</span>
-      </div>
-    </div>
-    <div id="statusError"></div>
+    <div id="arch-badge" onclick="toggleArch()"><span id="arch-lbl">&#127754; &#1055;&#1088;&#1086;&#1074;&#1086;&#1076;&#1085;&#1080;&#1082;</span></div>
   </div>
-
-  <!-- SPARKS TAB -->
-  <div class="content" id="tab-sparks">
-    <div class="card">
-      <div class="card-title">SparkNet — Top Signals</div>
-      <div id="sparkList"><div class="loading">Loading...</div></div>
-    </div>
+  <div id="arch-panel">
+    <div class="arch-btn active" data-arch="conductor" onclick="setArch('conductor')"><span>&#127754;</span>&#1055;&#1088;&#1086;&#1074;&#1086;&#1076;&#1085;&#1080;&#1082;</div>
+    <div class="arch-btn" data-arch="warrior" onclick="setArch('warrior')"><span>&#9876;&#65039;</span>&#1042;&#1086;&#1080;&#1085;</div>
+    <div class="arch-btn" data-arch="creator" onclick="setArch('creator')"><span>&#127912;</span>&#1058;&#1074;&#1086;&#1088;&#1077;&#1094;</div>
+    <div class="arch-btn" data-arch="strategist" onclick="setArch('strategist')"><span>&#9823;&#65039;</span>&#1057;&#1090;&#1088;&#1072;&#1090;&#1077;&#1075;</div>
+    <div class="arch-btn" data-arch="observer" onclick="setArch('observer')"><span>&#128065;&#65039;</span>&#1053;&#1072;&#1073;&#1083;.</div>
+    <div class="arch-btn" data-arch="architect" onclick="setArch('architect')"><span>&#127963;&#65039;</span>&#1040;&#1088;&#1093;&#1080;&#1090;&#1077;&#1082;&#1090;&#1086;&#1088;</div>
   </div>
-
-  <!-- THOUGHTS TAB -->
-  <div class="content" id="tab-thoughts">
-    <div class="card">
-      <div class="card-title">ConsciousnessLoop — Recent Thoughts</div>
-      <div id="thoughtList"><div class="loading">Loading...</div></div>
-    </div>
+  <div id="tabs">
+    <div class="tab active" data-tab="chat" onclick="switchTab('chat')">&#128172; &#1044;&#1078;&#1072;&#1088;&#1074;&#1080;&#1089;</div>
+    <div class="tab" data-tab="projects" onclick="switchTab('projects')">&#127919; &#1055;&#1088;&#1086;&#1077;&#1082;&#1090;&#1099;</div>
+    <div class="tab" data-tab="memory" onclick="switchTab('memory')">&#129504; &#1055;&#1072;&#1084;&#1103;&#1090;&#1100;</div>
+    <div class="tab" data-tab="signals" onclick="switchTab('signals')">&#128225; &#1057;&#1080;&#1075;&#1085;&#1072;&#1083;&#1099;</div>
   </div>
-
-  <!-- THINK TAB -->
-  <div class="content" id="tab-think">
-    <div style="font-size:11px;color:var(--muted);text-align:right;padding:4px 8px 0;" id="modelBadge"></div>
-    <div class="chat-wrap">
-      <div class="chat-messages" id="chatMessages">
-        <div class="msg ai">
-          <div class="msg-bubble">Ask me anything about GodLocal status, trades, or signals.</div>
+  <div id="main">
+    <div id="tab-chat" class="tab-view active"><div id="chat-wrap"><div id="messages"></div></div></div>
+    <div id="tab-projects" class="tab-view"><div id="projects-view"><div id="proj-list"></div></div></div>
+    <div id="tab-memory" class="tab-view">
+      <div id="memory-view">
+        <div class="msec"><div class="msec-title">&#128203; &#1047;&#1072;&#1076;&#1072;&#1095;&#1080;</div><div id="todos"></div></div>
+        <div class="msec"><div class="msec-title">&#128221; &#1047;&#1072;&#1084;&#1077;&#1090;&#1082;&#1080;</div><div id="notes"></div>
+          <div id="mem-input-row"><input id="mem-input" placeholder="&#1047;&#1072;&#1087;&#1086;&#1084;&#1085;&#1080;..." /><button id="mem-save" onclick="saveNote()">+</button></div>
         </div>
       </div>
-      <div class="chat-input-wrap">
-        <input class="chat-input" id="chatInput" placeholder="Ask GodLocal..." onkeydown="if(event.key==='Enter')sendChat()" />
-        <button class="send-btn" onclick="sendChat()">↑</button>
+    </div>
+    <div id="tab-signals" class="tab-view">
+      <div id="signals-view">
+        <div class="sig-hdr"><div class="sig-title">&#128225; Solana Sniper</div><div class="scan-btn" onclick="scanNow()">&#9889; &#1057;&#1082;&#1072;&#1085;</div></div>
+        <div id="sigs"></div>
+        <div style="margin-top:16px"><div class="msec-title">&#128273; &#1055;&#1072;&#1090;&#1090;&#1077;&#1088;&#1085;&#1099;</div><div id="pats"></div></div>
       </div>
     </div>
   </div>
+  <div id="input-area">
+    <div id="quick">
+      <div class="qbtn" onclick="qa('&#1073;&#1088;&#1080;&#1092;&#1080;&#1085;&#1075;')">&#128203; &#1041;&#1088;&#1080;&#1092;&#1080;&#1085;&#1075;</div>
+      <div class="qbtn" onclick="qa('&#1088;&#1077;&#1092;&#1083;&#1077;&#1082;&#1089;&#1080;&#1103;')">&#128302; &#1056;&#1077;&#1092;&#1083;&#1077;&#1082;&#1089;&#1080;&#1103;</div>
+      <div class="qbtn" onclick="qa('&#1094;&#1077;&#1083;&#1080;')">&#127919; &#1062;&#1077;&#1083;&#1080;</div>
+      <div class="qbtn" onclick="qa('&#1079;&#1072;&#1076;&#1072;&#1095;&#1080;')">&#9989; &#1047;&#1072;&#1076;&#1072;&#1095;&#1080;</div>
+      <div class="qbtn" onclick="qa('&#1089;&#1090;&#1072;&#1090;&#1091;&#1089;')">&#128202; &#1057;&#1090;&#1072;&#1090;&#1091;&#1089;</div>
+      <div class="qbtn" onclick="openCfg()">&#9881;&#65039; API</div>
+    </div>
+    <div id="input-row">
+      <button class="ibtn" id="voice-btn" onclick="toggleVoice()">&#127908;</button>
+      <textarea id="input-box" rows="1" placeholder="&#1057;&#1087;&#1088;&#1086;&#1089;&#1080; &#1044;&#1078;&#1072;&#1088;&#1074;&#1080;&#1089;&#1072;..." onkeydown="onKey(event)" oninput="resize(this)"></textarea>
+      <button class="ibtn" id="send-btn" onclick="send()">&#8593;</button>
+    </div>
+  </div>
+</div>
+<div id="cfg-overlay" onclick="closeCfgOut(event)">
+  <div id="cfg-panel">
+    <button id="cfg-close" onclick="closeCfg()">&#10005;</button>
+    <h2>&#9881;&#65039; &#1053;&#1072;&#1089;&#1090;&#1088;&#1086;&#1081;&#1082;&#1080;</h2>
+    <div class="cfg-row"><div class="cfg-lbl">Gemini API Key</div><input class="cfg-inp" id="cfg-key" type="password" placeholder="AIza..." /></div>
+    <button id="cfg-save" onclick="saveCfg()">&#128190; &#1057;&#1086;&#1093;&#1088;&#1072;&#1085;&#1080;&#1090;&#1100;</button>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+'use strict';
+const S={
+  arch:localStorage.getItem('arch')||'conductor',
+  key:localStorage.getItem('gkey')||'',
+  hist:JSON.parse(localStorage.getItem('hist')||'[]'),
+  notes:JSON.parse(localStorage.getItem('notes')||'[]'),
+  todos:JSON.parse(localStorage.getItem('todos')||'[]'),
+  rec:false,mr:null
+};
+const A={
+  conductor:{n:'Проводник',e:'&#127754;',s:'Ты Проводник — мудрый AI-наставник Ростислава. Говоришь спокойно, видишь суть за словами. 1-3 предложения. Без "Конечно!", "Отлично!".'},
+  warrior:{n:'Воин',e:'&#9876;&#65039;',s:'Ты Воин — резкий прямой партнёр Ростислава. Режешь правду в лоб, один конкретный шаг. 2 предложения max.'},
+  creator:{n:'Творец',e:'&#127912;',s:'Ты Творец — вдохновляющий AI-партнёр. Генерируешь идеи, образы, нестандартные решения. 2-3 предложения.'},
+  strategist:{n:'Стратег',e:'&#9823;&#65039;',s:'Ты Стратег — аналитический партнёр. Думаешь на 10 ходов вперёд. Данные, логика, прогнозы. 2-3 предложения.'},
+  observer:{n:'Наблюдатель',e:'&#128065;&#65039;',s:'Ты Наблюдатель — тихий проницательный партнёр. Замечаешь паттерны, задаёшь неудобные вопросы. 1-2 предложения.'},
+  architect:{n:'Архитектор',e:'&#127963;&#65039;',s:'Ты Архитектор — системный партнёр. Строишь структуры, мыслишь масштабом. 2-3 предложения.'}
+};
+const CTX=`ПРОЕКТЫ РОСТИСЛАВА:
+1. X100 OASIS (@Provodnikro_bot) LIVE — Голосовой бот, 6 архетипов, Gemini 2.0. $100/$12мес. Следующий шаг: публичный запуск.
+2. Oasis Sanctuary v0.5 LIVE — AI-тамагочи, 11 агентов. Следующий шаг: v0.6 механики #61-80.
+3. GodLocal — open-core AI поисковик MIT, EUR9/мес vs Perplexity $20. Следующий шаг: инкорпорация Ирландия + первый клиент.
+4. Solana Sniper LIVE — авто-сканер каждые 2ч, $50/мес. Рекорды: NARCO +7902%, GameStop +4449%. До 1 мар наблюдение.
+ПОЗИЦИОНИРОВАНИЕ: Ростислав — Проводник, автор X100: 100 днив, строит 1B+ компанию.`;
+const SIGS=[
+  {t:'HUMAN',g:'+740%',mc:'$2.1M',time:'2ч',p:'h1<0 + 24h>100%'},
+  {t:'EMOTIONS',g:'+727%',mc:'$980K',time:'2ч',p:'старый нарратив'},
+  {t:'Robot',g:'+547%',mc:'$560K',time:'4ч',p:'ultra-early <5мин'},
+  {t:'NARCO',g:'+7902%',mc:'$45M',time:'рекорд',p:'dead cat + нарратив'},
+  {t:'GameStop',g:'+4449%',mc:'$28M',time:'рекорд',p:'старый нарратив'},
+];
+const PATS=['ultra-early <5мин листинг -> взрыв объёма','h1<0 + 24h>100% -> аккумуляция перед взрывом','старый нарратив -> revival pump','mc<$500K + vol>$50K -> x10 потенциал','dead cat + нарратив -> шорт-сквиз'];
+const PROJS=[
+  {n:'&#127897;&#65039; X100 OASIS Bot',s:'live',d:'@Provodnikro_bot - 6 архетипов - голосовой - Gemini 2.0',nx:'Публичный запуск + первые платящие',q:'Главный следующий шаг для X100 OASIS прямо сейчас?'},
+  {n:'&#127807; Oasis Sanctuary',s:'live',d:'AI-тамагочи v0.5 - 11 агентов - oasis-eternal-sanctuary.onrender.com',nx:'v0.6 — механики #61-80',q:'Что сделать для Oasis v0.6 прямо сейчас?'},
+  {n:'&#128269; GodLocal',s:'build',d:'Open-core AI MIT - EUR9/мес vs Perplexity $20',nx:'Инкорпорация Ирландия + первый клиент',q:'Как найти первого клиента GodLocal быстрее всего?'},
+  {n:'&#128225; Solana Sniper',s:'live',d:'Авто-сканер каждые 2ч - $50/мес - 13 паттернов',nx:'Наблюд. неделя до 1 мар -> реальные сделки',q:'Стоит ли уже начинать торговать или ждать до 1 марта?'},
+];
+document.addEventListener('DOMContentLoaded',()=>{
+  renderArch();renderProj();renderMem();renderSigs();
+  addMsg('agent',A[S.arch].e+' Jarvis активирован. Анализирую намерения.'+(S.key?'':'
 
-  <script>
-    const BASE = 'https://godlocal.vercel.app';
-    let killActive = false;
-    let pollTimer = null;
-
-    function switchTab(name) {
-      document.querySelectorAll('.tab').forEach((t,i) => {
-        const names = ['status','sparks','thoughts','think'];
-        t.classList.toggle('active', names[i] === name);
-      });
-      document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
-      document.getElementById('tab-' + name).classList.add('active');
-    }
-
-    async function fetchStatus() {
-      try {
-        const r = await fetch(BASE + '/mobile/status');
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const d = await r.json();
-        updateUI(d);
-        document.getElementById('statusDot').className = 'dot green';
-        document.getElementById('statusText').textContent = 'live';
-        document.getElementById('apiStatus').textContent = 'online';
-        document.getElementById('apiStatus').className = 'status-val green';
-        document.getElementById('statusError').innerHTML = '';
-      } catch(e) {
-        document.getElementById('statusDot').className = 'dot red';
-        document.getElementById('statusText').textContent = 'offline';
-        document.getElementById('apiStatus').textContent = 'offline';
-        document.getElementById('apiStatus').className = 'status-val red';
-        document.getElementById('statusError').innerHTML = '<div class="error-msg">API unreachable — ' + e.message + '</div>';
-      }
-      document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-    }
-
-    function updateUI(d) {
-      // Circuit Breaker
-      const cb = d.circuit_breaker || {};
-      const cbState = document.getElementById('cbState');
-      const tripped = cb.is_tripped || false;
-      cbState.textContent = tripped ? 'TRIPPED ⚠' : 'OK';
-      cbState.className = 'status-val ' + (tripped ? 'red' : 'green');
-      document.getElementById('cbLosses').textContent = cb.consecutive_losses ?? '—';
-      document.getElementById('cbDailyLoss').textContent = cb.daily_loss_sol != null ? cb.daily_loss_sol.toFixed(3) : '—';
-
-      // Kill switch
-      killActive = d.kill_switch_active || false;
-      const btn = document.getElementById('killBtn');
-      if (killActive) {
-        btn.textContent = '☠ KILL SWITCH — ON';
-        btn.className = 'kill-switch active';
-      } else {
-        btn.textContent = '☠ KILL SWITCH — OFF';
-        btn.className = 'kill-switch inactive';
-      }
-
-      // Sparks
-      const sparks = d.sparks || [];
-      const sl = document.getElementById('sparkList');
-      if (sparks.length === 0) {
-        sl.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px;">No signals yet</div>';
-      } else {
-        sl.innerHTML = sparks.slice(0,10).map(s => {
-          const score = s.ema_score ?? s.score ?? 0;
-          const cls = score >= 0.7 ? 'spark-high' : score >= 0.4 ? 'spark-mid' : 'spark-low';
-          return '<div class="spark-item"><span class="spark-name">' + (s.name || s.id || 'Signal') + '</span>'
-            + '<span class="spark-score ' + cls + '">' + (score*100).toFixed(0) + '%</span></div>';
-        }).join('');
-      }
-
-      // Thoughts
-      const thoughts = d.thoughts || [];
-      const tl = document.getElementById('thoughtList');
-      if (thoughts.length === 0) {
-        tl.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px;">No thoughts yet</div>';
-      } else {
-        tl.innerHTML = thoughts.slice(0,5).map(t => {
-          const text = typeof t === 'string' ? t : (t.thought || t.content || JSON.stringify(t));
-          const ts = t.timestamp ? new Date(t.timestamp).toLocaleTimeString() : '';
-          return '<div class="thought-item"><div class="thought-text">' + text + '</div>'
-            + (ts ? '<div class="thought-time">' + ts + '</div>' : '') + '</div>';
-        }).join('');
-      }
-    }
-
-    async function toggleKillSwitch() {
-      const newState = !killActive;
-      const btn = document.getElementById('killBtn');
-      btn.disabled = true;
-      try {
-        const r = await fetch(BASE + '/mobile/kill-switch', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({active: newState})
+&#9888;&#65039; Нет Gemini Key — нажми &#9881;&#65039; API.'));
+});
+function switchTab(n){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===n));
+  document.querySelectorAll('.tab-view').forEach(v=>v.classList.toggle('active',v.id==='tab-'+n));
+}
+function renderArch(){
+  document.getElementById('arch-lbl').innerHTML=A[S.arch].e+' '+A[S.arch].n;
+  document.querySelectorAll('.arch-btn').forEach(b=>b.classList.toggle('active',b.dataset.arch===S.arch));
+}
+function toggleArch(){document.getElementById('arch-panel').classList.toggle('open');}
+function setArch(a){
+  S.arch=a;localStorage.setItem('arch',a);renderArch();
+  document.getElementById('arch-panel').classList.remove('open');
+  addMsg('agent',A[a].e+' Режим '+A[a].n+' активирован.');toast(A[a].e+' '+A[a].n);
+}
+function addMsg(role,text,extra){
+  const msgs=document.getElementById('messages');
+  const d=document.createElement('div');d.className='msg '+role;
+  const av=role==='user'?'&#128100;':A[S.arch].e;
+  let h=`<div class="msg-avatar">${av}</div><div>`;
+  if(extra&&extra.intent)h+=`<div class="intent-tag">intent: ${extra.intent}</div>`;
+  h+=`<div class="msg-bubble">${text.replace(/
+/g,'<br>')}</div>`;
+  if(extra&&extra.action)h+=`<div class="action-item">&#128204; ${extra.action}</div>`;
+  h+='</div>';d.innerHTML=h;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;
+}
+function addThinking(){
+  const msgs=document.getElementById('messages');
+  const d=document.createElement('div');d.className='msg agent';d.id='thk';
+  d.innerHTML=`<div class="msg-avatar">${A[S.arch].e}</div><div><div class="msg-bubble"><div class="thinking-step" id="thk-s">Анализирую намерение...</div><div class="thinking-dots"><span></span><span></span><span></span></div></div></div>`;
+  msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;
+}
+function setThk(t){const e=document.getElementById('thk-s');if(e)e.textContent=t;}
+function rmThk(){const e=document.getElementById('thk');if(e)e.remove();}
+async function send(){
+  const box=document.getElementById('input-box');const txt=box.value.trim();if(!txt)return;
+  box.value='';resize(box);addMsg('user',txt);switchTab('chat');addThinking();
+  document.getElementById('send-btn').disabled=true;
+  S.hist.push({r:'u',t:txt.slice(0,500),ts:Date.now()});
+  if(S.hist.length>20)S.hist=S.hist.slice(-20);
+  try{
+    const r=await think(txt);rmThk();
+    addMsg('agent',r.reply,{intent:r.analysis&&r.analysis.intent,action:r.analysis&&r.analysis.action_item});
+    if(r.analysis&&r.analysis.action_item)saveTodo(r.analysis.action_item);
+    S.hist.push({r:'a',t:r.reply.slice(0,500),ts:Date.now()});
+    localStorage.setItem('hist',JSON.stringify(S.hist.slice(-20)));
+  }catch(e){rmThk();addMsg('agent','&#9888;&#65039; '+(e.message||'Ошибка. Проверь API key.'));}
+  document.getElementById('send-btn').disabled=false;
+}
+function qa(t){document.getElementById('input-box').value=t;send();}
+function onKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}
+function resize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
+async function gemini(prompt,maxT,temp){
+  if(!S.key)throw new Error('Gemini API Key не задан — нажми &#9881;&#65039; API');
+  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+S.key,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:maxT||280,temperature:temp||0.85}})
+  });
+  if(!r.ok){const e=await r.text();throw new Error('Gemini '+r.status+': '+e.slice(0,100));}
+  const d=await r.json();return d?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()||'';
+}
+async function think(userText){
+  const a=A[S.arch];
+  const hist=S.hist.slice(-4).map(h=>(h.r==='u'?'Ростислав':'AI')+': '+h.t).join('
+');
+  setThk('Анализирую намерение...');
+  let analysis=null;
+  try{
+    const raw=await gemini('Анализируй. Верни ТОЛЬКО JSON без markdown:
+{"intent":"задача|рефлексия|вопрос|инсайт|эмоция|крипто|проект","energy":"высокая|нейтральная|низкая","real_need":"одна фраза","project_link":"x100|oasis|godlocal|crypto|нет","action_item":"задача или null","response_style":"мотивировать|направить|проанализировать|создать|кратко","key_insight":"инсайт или null"}
+Сообщение: "'+userText+'"
+История: '+(hist||'(начало)'),200,0.1);
+    const m=raw.match(/\{[\s\S]*\}/);if(m)analysis=JSON.parse(m[0]);
+  }catch(e){}
+  setThk('Генерирую ответ '+a.n+'а...');
+  const ins=analysis&&analysis.key_insight?'
+Инсайт: '+analysis.key_insight:'';
+  const nee=analysis&&analysis.real_need?'
+Нужда: '+analysis.real_need:'';
+  const sty=analysis&&analysis.response_style?'
+Стиль: '+analysis.response_style:'';
+  const reply=await gemini(a.s+'
+'+CTX+ins+nee+sty+'
+Правила: 2-3 предложения. Без "Конечно!". Язык как у юзера. Действие не теория.
+История:
+'+(hist||'(начало)')+'
+Ростислав: "'+userText+'"
+'+a.n+':',280,0.88);
+  return{reply,analysis};
+}
+function saveTodo(t){S.todos.unshift({t,d:false});if(S.todos.length>20)S.todos=S.todos.slice(0,20);localStorage.setItem('todos',JSON.stringify(S.todos));renderMem();}
+function saveNote(){
+  const i=document.getElementById('mem-input');const t=i.value.trim();if(!t)return;
+  S.notes.unshift(t);if(S.notes.length>30)S.notes=S.notes.slice(0,30);
+  localStorage.setItem('notes',JSON.stringify(S.notes));i.value='';renderMem();toast('&#128221; Запомнил');
+}
+function toggleTodo(i){S.todos[i].d=!S.todos[i].d;localStorage.setItem('todos',JSON.stringify(S.todos));renderMem();}
+function renderMem(){
+  const te=document.getElementById('todos');
+  te.innerHTML=S.todos.length?S.todos.slice(0,8).map((t,i)=>'<div class="titem'+(t.d?' done':'')+'" onclick="toggleTodo('+i+')"><div class="tchk"></div><span class="ttxt">'+t.t+'</span></div>').join(''):'<div class="mitem">&#128161; Задач пока нет — упомяни в чате.</div>';
+  const ne=document.getElementById('notes');
+  ne.innerHTML=S.notes.length?S.notes.slice(0,10).map(n=>'<div class="mitem">&#128221; '+n+'</div>').join(''):'<div class="mitem">&#128221; Напиши ниже чтобы запомнить.</div>';
+}
+function renderProj(){
+  document.getElementById('proj-list').innerHTML=PROJS.map((p,i)=>'<div class="pcard" onclick="qaP('+i+')"><div class="pcard-top"><div class="pname">'+p.n+'</div><div class="pstatus s'+p.s+'">'+(p.s==='live'?'&#9679; LIVE':'&#9881; BUILD')+'</div></div><div class="pdesc">'+p.d+'</div><div class="pnext">'+p.nx+'</div></div>').join('');
+}
+function qaP(i){qa(PROJS[i].q);switchTab('chat');}
+function renderSigs(){
+  document.getElementById('sigs').innerHTML=SIGS.map(s=>'<div class="scard"><div class="stop"><div class="stoken">'+s.t+'</div><div class="sgain'+(s.g.startsWith('-')?' neg':'')+'">'+s.g+'</div></div><div class="srow"><span>MC: '+s.mc+'</span><span>'+s.time+'</span></div><span class="spat">'+s.p+'</span></div>').join('');
+  document.getElementById('pats').innerHTML=PATS.map(p=>'<div class="pat-item">&#8226; '+p+'</div>').join('');
+}
+function scanNow(){toast('&#9889; Запускаю...');switchTab('chat');qa('Проанализируй Solana сигналы — на что смотреть прямо сейчас?');}
+async function toggleVoice(){
+  if(S.rec){S.mr&&S.mr.stop();S.rec=false;document.getElementById('voice-btn').classList.remove('rec');return;}
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const mr=new MediaRecorder(stream);const ch=[];
+    mr.ondataavailable=e=>ch.push(e.data);
+    mr.onstop=async()=>{
+      stream.getTracks().forEach(t=>t.stop());toast('&#127908; Распознаю...');
+      if(!S.key){toast('&#9888;&#65039; Нужен API key');return;}
+      try{
+        const blob=new Blob(ch,{type:'audio/webm'});
+        const fd=new FormData();fd.append('file',blob,'a.webm');
+        const ur=await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files?key='+S.key,{method:'POST',headers:{'X-Goog-Upload-Protocol':'multipart'},body:fd});
+        const ud=await ur.json();const uri=ud&&ud.file&&ud.file.uri;if(!uri)throw new Error('upload');
+        const tr=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+S.key,{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({contents:[{parts:[{fileData:{mimeType:'audio/webm',fileUri:uri}},{text:'Transcribe. Output ONLY transcription.'}]}]})
         });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        await fetchStatus();
-      } catch(e) {
-        alert('Failed: ' + e.message);
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
-    async function sendChat() {
-      const input = document.getElementById('chatInput');
-      const msg = input.value.trim();
-      if (!msg) return;
-      input.value = '';
-      addChatMsg('user', msg);
-      const thinkingBubble = addChatMsg('ai', '⏳ Thinking...');
-      try {
-        const r = await fetch(BASE + '/think', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({prompt: msg})
-        });
-        const d = await r.json();
-        // Update model badge
-        if (d.model) {
-          document.getElementById('modelBadge').textContent = '⚡ ' + d.model;
-        }
-        // Show steps if available
-        const steps = d.steps || [];
-        if (steps.length > 0) {
-          let stepsHtml = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">🔧 ' + steps.length + ' step' + (steps.length > 1 ? 's' : '') + ':</div>';
-          stepsHtml += '<div style="font-size:11px;background:rgba(255,255,255,0.04);border-radius:6px;padding:6px 8px;margin-bottom:8px;">';
-          steps.forEach((s, i) => {
-            const preview = s.result_preview ? ' → ' + s.result_preview.substring(0, 60) + (s.result_preview.length > 60 ? '…' : '') : '';
-            stepsHtml += '<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.06);">step ' + (i+1) + ': <b>' + s.tool + '</b>' + preview + '</div>';
-          });
-          stepsHtml += '</div>';
-          stepsHtml += '<div>' + (d.response || d.thought || d.result || JSON.stringify(d)) + '</div>';
-          thinkingBubble.innerHTML = stepsHtml;
-        } else {
-          thinkingBubble.textContent = d.response || d.thought || d.result || JSON.stringify(d);
-        }
-      } catch(e) {
-        thinkingBubble.textContent = 'Error: ' + e.message;
-        thinkingBubble.style.color = 'var(--red)';
-      }
-      document.getElementById('chatMessages').scrollTop = 999999;
-    }
-
-    function addChatMsg(role, text) {
-      const wrap = document.getElementById('chatMessages');
-      const div = document.createElement('div');
-      div.className = 'msg ' + role;
-      const bubble = document.createElement('div');
-      bubble.className = 'msg-bubble';
-      bubble.textContent = text;
-      div.appendChild(bubble);
-      wrap.appendChild(div);
-      wrap.scrollTop = 999999;
-      return bubble;
-    }
-
-    // Poll every 5 seconds
-    fetchStatus();
-    setInterval(fetchStatus, 5000);
-  </script>
+        const td=await tr.json();const txt=td&&td.candidates&&td.candidates[0]&&td.candidates[0].content&&td.candidates[0].content.parts&&td.candidates[0].content.parts[0]&&td.candidates[0].content.parts[0].text;
+        if(txt){document.getElementById('input-box').value=txt.trim();resize(document.getElementById('input-box'));}
+      }catch(e){toast('&#9888;&#65039; Ошибка распознавания');}
+    };
+    mr.start();S.mr=mr;S.rec=true;document.getElementById('voice-btn').classList.add('rec');
+  }catch(e){toast('&#9888;&#65039; Нет доступа к микрофону');}
+}
+function openCfg(){document.getElementById('cfg-key').value=S.key||'';document.getElementById('cfg-overlay').classList.add('open');}
+function closeCfg(){document.getElementById('cfg-overlay').classList.remove('open');}
+function closeCfgOut(e){if(e.target===document.getElementById('cfg-overlay'))closeCfg();}
+function saveCfg(){S.key=document.getElementById('cfg-key').value.trim();localStorage.setItem('gkey',S.key);closeCfg();toast('&#10003; Сохранено');}
+let tt;function toast(m){const e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>e.classList.remove('show'),2500);}
+document.addEventListener('click',e=>{
+  const p=document.getElementById('arch-panel');const b=document.getElementById('arch-badge');
+  if(!p.contains(e.target)&&e.target!==b&&!b.contains(e.target))p.classList.remove('open');
+});
+</script>
 </body>
 </html>
